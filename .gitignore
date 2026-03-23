@@ -1,0 +1,21 @@
+# Build
+bin/
+obj/
+.vs/
+
+# IDE
+.vscode/
+*.user
+*.suo
+
+# Local config/secrets
+**/appsettings.Development.json
+**/secrets.json
+.env
+.env.*
+*.pfx
+*.p12
+*.key
+*.pem
+id_rsa
+id_ed25519

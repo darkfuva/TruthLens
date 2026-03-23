@@ -1,0 +1,48 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.2.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TruthLens.Api", "TruthLens.Api\TruthLens.Api.csproj", "{3569B1E4-465D-DAC2-08AE-23D81A66472A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TruthLens.Application", "TruthLens.Application\TruthLens.Application.csproj", "{9098FB18-7881-05B9-2568-FF5470A6BCB7}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TruthLens.Domain", "TruthLens.Domain\TruthLens.Domain.csproj", "{6FBA2600-6E90-5FA0-3C49-124B9C486DAF}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TruthLens.Infrastructure", "TruthLens.Infrastructure\TruthLens.Infrastructure.csproj", "{A5BE8B7A-3F82-089B-8D19-592795B9EE02}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TruthLens.Worker", "TruthLens.Worker\TruthLens.Worker.csproj", "{F466A3A5-5C62-5B61-7D38-E1C29A322A5D}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{3569B1E4-465D-DAC2-08AE-23D81A66472A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3569B1E4-465D-DAC2-08AE-23D81A66472A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3569B1E4-465D-DAC2-08AE-23D81A66472A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3569B1E4-465D-DAC2-08AE-23D81A66472A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9098FB18-7881-05B9-2568-FF5470A6BCB7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9098FB18-7881-05B9-2568-FF5470A6BCB7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9098FB18-7881-05B9-2568-FF5470A6BCB7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9098FB18-7881-05B9-2568-FF5470A6BCB7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6FBA2600-6E90-5FA0-3C49-124B9C486DAF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6FBA2600-6E90-5FA0-3C49-124B9C486DAF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6FBA2600-6E90-5FA0-3C49-124B9C486DAF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6FBA2600-6E90-5FA0-3C49-124B9C486DAF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A5BE8B7A-3F82-089B-8D19-592795B9EE02}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A5BE8B7A-3F82-089B-8D19-592795B9EE02}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A5BE8B7A-3F82-089B-8D19-592795B9EE02}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A5BE8B7A-3F82-089B-8D19-592795B9EE02}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F466A3A5-5C62-5B61-7D38-E1C29A322A5D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F466A3A5-5C62-5B61-7D38-E1C29A322A5D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F466A3A5-5C62-5B61-7D38-E1C29A322A5D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F466A3A5-5C62-5B61-7D38-E1C29A322A5D}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {0CA84C75-D109-408E-A2B2-BE7B13A6FBE7}
+	EndGlobalSection
+EndGlobal
