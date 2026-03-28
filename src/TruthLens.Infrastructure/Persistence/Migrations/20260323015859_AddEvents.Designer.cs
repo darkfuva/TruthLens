@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using TruthLens.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using TruthLens.Infrastructure.Persistence;
 namespace TruthLens.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(TruthLensDbContext))]
-    partial class TruthLensDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260323015859_AddEvents")]
+    partial class AddEvents
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -40,17 +43,6 @@ namespace TruthLens.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset>("LastSeenAtUtc")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<DateTimeOffset?>("SummarizedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Summary")
-                        .HasMaxLength(4000)
-                        .HasColumnType("character varying(4000)");
-
-                    b.Property<string>("SummaryModel")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
                     b.Property<string>("Title")
                         .IsRequired()
                         .HasMaxLength(500)
@@ -68,9 +60,6 @@ namespace TruthLens.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
-
-                    b.Property<double?>("ClusterAssignmentScore")
-                        .HasColumnType("double precision");
 
                     b.Property<DateTimeOffset>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");

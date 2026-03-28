@@ -9,4 +9,5 @@ public interface IPostRepository
     Task AddRangeAsync(IEnumerable<Post> posts, CancellationToken ct);
     Task SaveChangesAsync(CancellationToken ct);
     Task<IReadOnlyList<Post>> GetUnembeddedBatchAsync(int batchSize, CancellationToken ct);
+    Task<IReadOnlyList<Post>> GetUnclusteredEmbeddedBatchAsync(int batchSize, CancellationToken ct);
 }

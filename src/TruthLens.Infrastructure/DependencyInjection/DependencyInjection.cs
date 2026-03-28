@@ -11,6 +11,10 @@ using TruthLens.Infrastructure.Rss;
 using Microsoft.Extensions.Options;
 using TruthLens.Application.Services.Embedding;
 using TruthLens.Infrastructure.Embedding;
+using TruthLens.Application.Repositories.Event;
+using TruthLens.Application.Services.Clustering;
+using TruthLens.Application.Services.Summarization;
+using TruthLens.Infrastructure.Summarization;
 
 
 namespace TruthLens.Infrastructure;
@@ -28,18 +32,22 @@ public static class DependencyInjection
         services.AddScoped<IPostRepository, PostRepository>();
         services.AddScoped<RssIngestionService>();
         services.AddScoped<EmbeddingGenerationService>();
+        services.AddScoped<IEventRepository, EventRepository>();
+        services.AddScoped<ICosineSimilarityService, CosineSimilarityService>();
+        services.AddScoped<ClusteringService>();
+
+
+        services.AddHttpClient<IRssFeedClient, RssFeedClient>(client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(20);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("TruthLens/0.1");
+        });
 
         services.AddOptions<OllamaOptions>()
             .Bind(configuration.GetSection(OllamaOptions.SectionName))
             .Validate(x => !string.IsNullOrWhiteSpace(x.BaseUrl), "Ollama:BaseUrl is required.")
             .Validate(x => !string.IsNullOrWhiteSpace(x.EmbeddingModel), "Ollama:EmbeddingModel is required.")
             .ValidateOnStart();
-            
-        services.AddHttpClient<IRssFeedClient, RssFeedClient>(client =>
-        {
-            client.Timeout = TimeSpan.FromSeconds(20);
-            client.DefaultRequestHeaders.UserAgent.ParseAdd("TruthLens/0.1");
-        });
 
         services.AddHttpClient<IEmbeddingClient, OllamaEmbeddingClient>((sp, client) =>
         {
@@ -47,6 +55,17 @@ public static class DependencyInjection
             client.BaseAddress = new Uri(options.BaseUrl);
             client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
         });
+
+        // DependencyInjection.cs (add registrations)
+        services.AddScoped<EventSummarizationService>();
+
+        services.AddHttpClient<IEventSummarizer, OllamaEventSummarizer>((sp, client) =>
+        {
+            var options = sp.GetRequiredService<IOptions<OllamaOptions>>().Value;
+            client.BaseAddress = new Uri(options.BaseUrl);
+            client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+        });
+
 
         return services;
     }

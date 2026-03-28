@@ -17,4 +17,7 @@ public sealed class Event
     public double? ConfidenceScore { get; set; }
 
     public ICollection<Post> Posts { get; set; } = new List<Post>();
+    public string? Summary { get; set; }
+    public string? SummaryModel { get; set; }
+    public DateTimeOffset? SummarizedAtUtc { get; set; }
 }

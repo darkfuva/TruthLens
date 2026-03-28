@@ -16,4 +16,5 @@ public sealed class Post
     public DateTimeOffset? EmbeddedAtUtc { get; set; }
     public Guid? EventId { get; set; }
     public Event? Event { get; set; }
+    public double? ClusterAssignmentScore { get; set; }
 }

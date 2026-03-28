@@ -35,4 +35,12 @@ public sealed class PostRepository : IPostRepository
             .Take(batchSize)
             .ToListAsync(ct);
     }
+    public async Task<IReadOnlyList<Post>> GetUnclusteredEmbeddedBatchAsync(int batchSize, CancellationToken ct)
+    {
+        return await _db.Posts
+            .Where(p => p.EventId == null && p.Embedding != null)
+            .OrderBy(p => p.PublishedAtUtc)
+            .Take(batchSize)
+            .ToListAsync(ct);
+    }
 }
