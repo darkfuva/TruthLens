@@ -1,3 +1,5 @@
+using Pgvector;
+
 namespace TruthLens.Domain.Entities;
 
 public sealed class Post
@@ -11,7 +13,7 @@ public sealed class Post
     public DateTimeOffset PublishedAtUtc { get; set; }
     public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
     public Source Source { get; set; } = null!;
-    public float[]? Embedding { get; set; }
+    public Vector? Embedding { get; set; }
     public string? EmbeddingModel { get; set; }
     public DateTimeOffset? EmbeddedAtUtc { get; set; }
     public Guid? EventId { get; set; }

@@ -1,5 +1,6 @@
 // EventRepository.cs
 using Microsoft.EntityFrameworkCore;
+using Pgvector;
 using TruthLens.Application.Repositories.Event;
 using TruthLens.Domain.Entities;
 
@@ -20,7 +21,7 @@ public sealed class EventRepository : IEventRepository
             .ToListAsync(ct);
     }
 
-    public async Task<Event> CreateAsync(string title, float[] centroidEmbedding, DateTimeOffset seenAtUtc, CancellationToken ct)
+    public async Task<Event> CreateAsync(string title, Vector centroidEmbedding, DateTimeOffset seenAtUtc, CancellationToken ct)
     {
         var evt = new Event
         {
@@ -54,25 +55,27 @@ public sealed class EventRepository : IEventRepository
             evt.CentroidEmbedding = ComputeCentroid(vectors);
         }
     }
-    private static float[] ComputeCentroid(IReadOnlyList<float[]> vectors)
+    private static Vector ComputeCentroid(IReadOnlyList<Vector> vectors)
     {
-        var dim = vectors[0].Length;
+        var first = vectors[0].ToArray();
+        var dim = first.Length;
         var sums = new double[dim];
 
         foreach (var v in vectors)
         {
-            if (v.Length != dim)
+            var values = v.ToArray();
+            if (values.Length != dim)
                 throw new InvalidOperationException("Embedding dimensions mismatch.");
 
             for (var i = 0; i < dim; i++)
-                sums[i] += v[i];
+                sums[i] += values[i];
         }
 
         var centroid = new float[dim];
         for (var i = 0; i < dim; i++)
             centroid[i] = (float)(sums[i] / vectors.Count);
 
-        return centroid;
+        return new Vector(centroid);
     }
     public async Task<IReadOnlyList<Event>> GetUnsummarizedBatchAsync(int batchSize, CancellationToken ct)
     {

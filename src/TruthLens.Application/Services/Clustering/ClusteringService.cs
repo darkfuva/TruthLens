@@ -28,7 +28,7 @@ public sealed class ClusteringService
         if (posts.Count == 0) return 0;
 
         var candidates = (await _eventRepository.GetRecentWithCentroidAsync(now.AddDays(-7), 500, ct))
-            .Where(e => e.CentroidEmbedding is { Length: > 0 })
+            .Where(e => e.CentroidEmbedding is not null)
             .ToList();
 
         var clustered = 0;

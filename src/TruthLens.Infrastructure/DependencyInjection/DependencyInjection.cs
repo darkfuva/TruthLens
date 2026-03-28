@@ -26,7 +26,7 @@ public static class DependencyInjection
         var conn = configuration.GetConnectionString("DefaultConnection")
             ?? throw new InvalidOperationException("Connection string 'DefaultConnection' is missing.");
 
-        services.AddDbContext<TruthLensDbContext>(options => options.UseNpgsql(conn));
+        services.AddDbContext<TruthLensDbContext>(options => options.UseNpgsql(conn, (o) => o.UseVector()));
 
         services.AddScoped<ISourceRepository, SourceRepository>();
         services.AddScoped<IPostRepository, PostRepository>();

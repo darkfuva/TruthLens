@@ -1,3 +1,5 @@
+using Pgvector;
+
 namespace TruthLens.Domain.Entities;
 
 public sealed class Event
@@ -8,7 +10,7 @@ public sealed class Event
     public string Title { get; set; } = string.Empty;
 
     // Optional: centroid embedding for fast similarity against new posts.
-    public float[]? CentroidEmbedding { get; set; }
+    public Vector? CentroidEmbedding { get; set; }
 
     public DateTimeOffset FirstSeenAtUtc { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset LastSeenAtUtc { get; set; } = DateTimeOffset.UtcNow;

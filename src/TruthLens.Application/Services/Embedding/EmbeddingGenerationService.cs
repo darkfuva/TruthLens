@@ -29,7 +29,7 @@ public sealed class EmbeddingGenerationService
 
         for (var i = 0; i < posts.Count; i++)
         {
-            posts[i].Embedding = vectors[i];
+            posts[i].Embedding = new Pgvector.Vector(vectors[i]);
             posts[i].EmbeddingModel = "local";
             posts[i].EmbeddedAtUtc = DateTimeOffset.UtcNow;
         }
