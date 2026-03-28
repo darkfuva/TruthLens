@@ -21,6 +21,16 @@ public sealed class EventRepository : IEventRepository
             .ToListAsync(ct);
     }
 
+    public async Task<IReadOnlyList<Event>> GetRecentForDashboardAsync(int maxCount, CancellationToken ct)
+    {
+        return await _db.Events
+            .AsNoTracking()
+            .Include(e => e.Posts)
+            .OrderByDescending(e => e.LastSeenAtUtc)
+            .Take(maxCount)
+            .ToListAsync(ct);
+    }
+
     public async Task<Event> CreateAsync(string title, Vector centroidEmbedding, DateTimeOffset seenAtUtc, CancellationToken ct)
     {
         var evt = new Event

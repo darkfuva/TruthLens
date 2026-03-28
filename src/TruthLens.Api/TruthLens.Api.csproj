@@ -18,6 +18,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\TruthLens.Application\TruthLens.Application.csproj" />
+    <ProjectReference Include="..\TruthLens.Infrastructure\TruthLens.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>

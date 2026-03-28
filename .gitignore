@@ -19,3 +19,7 @@ obj/
 *.pem
 id_rsa
 id_ed25519
+
+# Frontend artifacts
+**/node_modules/
+**/dist/
