@@ -2,7 +2,7 @@
 using System.Net.Http.Json;
 using Microsoft.Extensions.Options;
 using TruthLens.Application.Services.Summarization;
-using TruthLens.Infrastructure.Embedding;
+using TruthLens.Infrastructure.Ollama;
 
 namespace TruthLens.Infrastructure.Summarization;
 

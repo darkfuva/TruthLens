@@ -1,5 +1,5 @@
 // TruthLens.Infrastructure/Embedding/OllamaOptions.cs
-namespace TruthLens.Infrastructure.Embedding;
+namespace TruthLens.Infrastructure.Ollama;
 
 public sealed class OllamaOptions
 {

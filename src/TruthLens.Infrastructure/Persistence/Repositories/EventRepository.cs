@@ -106,4 +106,13 @@ public sealed class EventRepository : IEventRepository
     }
 
     public Task SaveChangesAsync(CancellationToken ct) => _db.SaveChangesAsync(ct);
+    public async Task<IReadOnlyList<Event>> GetRecentForConfidenceScoringAsync(int maxCount, CancellationToken ct)
+    {
+        return await _db.Events
+            .Include(e => e.Posts)
+            .Where(e => e.Posts.Any())
+            .OrderByDescending(e => e.LastSeenAtUtc)
+            .Take(maxCount)
+            .ToListAsync(ct);
+    }
 }

@@ -1,6 +1,6 @@
 // Persistence/Repositories/PostRepository.cs
 using Microsoft.EntityFrameworkCore;
-using TruthLens.Application.Services.Post;
+using TruthLens.Application.Repositories.Post;
 using TruthLens.Domain.Entities;
 using TruthLens.Infrastructure.Persistence;
 

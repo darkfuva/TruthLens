@@ -2,6 +2,7 @@
 using System.Net.Http.Json;
 using Microsoft.Extensions.Options;
 using TruthLens.Application.Services.Embedding;
+using TruthLens.Infrastructure.Ollama;
 
 namespace TruthLens.Infrastructure.Embedding;
 

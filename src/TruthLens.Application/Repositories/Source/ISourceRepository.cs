@@ -1,4 +1,4 @@
-namespace TruthLens.Application.Services.Source;
+namespace TruthLens.Application.Repositories.Source;
 
 using TruthLens.Domain.Entities;
 

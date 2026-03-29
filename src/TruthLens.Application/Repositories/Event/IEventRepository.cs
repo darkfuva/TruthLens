@@ -15,5 +15,6 @@ public interface IEventRepository
     Task<IReadOnlyList<Event>> GetUnsummarizedBatchAsync(int batchSize, CancellationToken ct);
     Task<IReadOnlyList<Post>> GetRecentPostsForEventAsync(Guid eventId, int maxPosts, CancellationToken ct);
     Task SaveChangesAsync(CancellationToken ct);
+    Task<IReadOnlyList<Event>> GetRecentForConfidenceScoringAsync(int maxCount, CancellationToken ct);
 
 }

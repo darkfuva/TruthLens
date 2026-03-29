@@ -5,6 +5,7 @@ using TruthLens.Application.Services.Rss;
 using TruthLens.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using TruthLens.Application.Services.Summarization;
+using TruthLens.Application.Services.Scoring;
 namespace TruthLens.Worker;
 
 public sealed class Worker : BackgroundService
@@ -62,6 +63,13 @@ public sealed class Worker : BackgroundService
                     p => p.Embedding != null && p.EventId == null,
                     stoppingToken);
 
+
+                if (clusteredCount > 0)
+                {
+                    var confidenceService = scope.ServiceProvider.GetRequiredService<EventConfidenceScoringService>();
+                    var rescored = await confidenceService.RecomputeRecentConfidenceAsync(200, stoppingToken);
+                    _logger.LogInformation("Confidence scoring updated for {Count} events.", rescored);
+                }
                 var avgScore = await db.Posts
                     .Where(p => p.ClusterAssignmentScore != null && p.EventId != null)
                     .Select(p => p.ClusterAssignmentScore)

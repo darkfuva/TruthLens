@@ -1,9 +1,9 @@
-using TruthLens.Api.Endpoints;
 using TruthLens.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
@@ -31,6 +31,7 @@ if (!app.Environment.IsDevelopment())
     app.UseHttpsRedirection();
 }
 
-app.MapEventsEndpoints();
+
+app.MapControllers();
 
 app.Run();

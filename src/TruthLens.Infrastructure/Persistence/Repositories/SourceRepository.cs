@@ -1,7 +1,7 @@
 namespace TruthLens.Infrastructure.Persistence;
 
 using Microsoft.EntityFrameworkCore;
-using TruthLens.Application.Services.Source;
+using TruthLens.Application.Repositories.Source;
 using TruthLens.Domain.Entities;
 
 public class SourceRepository : ISourceRepository

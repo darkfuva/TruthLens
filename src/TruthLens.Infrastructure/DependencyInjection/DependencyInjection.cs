@@ -2,12 +2,13 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using TruthLens.Application.Services.Post;
+using TruthLens.Application.Repositories.Post;
 using TruthLens.Application.Services.Rss;
-using TruthLens.Application.Services.Source;
+using TruthLens.Application.Repositories.Source;
 using TruthLens.Infrastructure.Persistence;
 using TruthLens.Infrastructure.Persistence.Repositories;
 using TruthLens.Infrastructure.Rss;
+using TruthLens.Infrastructure.Ollama;
 using Microsoft.Extensions.Options;
 using TruthLens.Application.Services.Embedding;
 using TruthLens.Infrastructure.Embedding;
@@ -15,7 +16,7 @@ using TruthLens.Application.Repositories.Event;
 using TruthLens.Application.Services.Clustering;
 using TruthLens.Application.Services.Summarization;
 using TruthLens.Infrastructure.Summarization;
-
+using TruthLens.Application.Services.Scoring;
 
 namespace TruthLens.Infrastructure;
 
@@ -35,6 +36,7 @@ public static class DependencyInjection
         services.AddScoped<IEventRepository, EventRepository>();
         services.AddScoped<ICosineSimilarityService, CosineSimilarityService>();
         services.AddScoped<ClusteringService>();
+        services.AddScoped<EventConfidenceScoringService>();
 
 
         services.AddHttpClient<IRssFeedClient, RssFeedClient>(client =>

@@ -1,6 +1,6 @@
 // ClusteringService.cs
 using TruthLens.Application.Repositories.Event;
-using TruthLens.Application.Services.Post;
+using TruthLens.Application.Repositories.Post;
 
 namespace TruthLens.Application.Services.Clustering;
 

@@ -1,5 +1,5 @@
 
-namespace TruthLens.Application.Services.Post;
+namespace TruthLens.Application.Repositories.Post;
 
 using TruthLens.Domain.Entities;
 

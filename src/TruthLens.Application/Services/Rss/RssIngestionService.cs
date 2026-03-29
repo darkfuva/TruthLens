@@ -1,7 +1,7 @@
 namespace TruthLens.Application.Services.Rss;
 
-using TruthLens.Application.Services.Post;
-using TruthLens.Application.Services.Source;
+using TruthLens.Application.Repositories.Post;
+using TruthLens.Application.Repositories.Source;
 using TruthLens.Domain.Entities;
 
 public sealed class RssIngestionService
