@@ -16,14 +16,41 @@ public sealed class EventsController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<ActionResult<IReadOnlyList<EventListItemResponse>>> GetRecentEventsAsync(
+    public async Task<ActionResult<PagedEventsResponse>> GetRecentEventsAsync(
+        [FromQuery] int? page,
+        [FromQuery] int? pageSize,
         [FromQuery] int? limit,
+        [FromQuery] string? sort,
+        [FromQuery] double? minConfidence,
         CancellationToken ct)
     {
-        var maxCount = Math.Clamp(limit ?? 50, 1, 200);
-        var events = await _eventRepository.GetRecentForDashboardAsync(maxCount, ct);
+        // Keep backward compatibility with old `limit` query by treating it as pageSize.
+        var resolvedPage = Math.Max(page ?? 1, 1);
+        var requestedPageSize = pageSize ?? limit ?? 50;
+        var resolvedPageSize = Math.Clamp(requestedPageSize, 1, 200);
+        var normalizedSort = (sort ?? "recent").Trim().ToLowerInvariant();
 
-        var response = events.Select(e => new EventListItemResponse(
+        if (normalizedSort is not ("recent" or "confidence"))
+        {
+            return BadRequest("sort must be either 'recent' or 'confidence'.");
+        }
+
+        if (minConfidence is < 0 or > 1)
+        {
+            return BadRequest("minConfidence must be between 0 and 1.");
+        }
+
+        var totalCount = await _eventRepository.CountForDashboardAsync(minConfidence, ct);
+        var totalPages = totalCount == 0 ? 0 : (int)Math.Ceiling(totalCount / (double)resolvedPageSize);
+
+        var events = await _eventRepository.GetPageForDashboardAsync(
+            resolvedPage,
+            resolvedPageSize,
+            normalizedSort,
+            minConfidence,
+            ct);
+
+        var items = events.Select(e => new EventListItemResponse(
             e.Id,
             e.Title,
             e.Summary,
@@ -36,6 +63,14 @@ public sealed class EventsController : ControllerBase
                 .Select(p => p.Title)
                 .FirstOrDefault()
         )).ToList();
+
+        var response = new PagedEventsResponse(
+            resolvedPage,
+            resolvedPageSize,
+            totalCount,
+            totalPages,
+            items
+        );
 
         return Ok(response);
     }

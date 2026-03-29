@@ -21,13 +21,34 @@ public sealed class EventRepository : IEventRepository
             .ToListAsync(ct);
     }
 
-    public async Task<IReadOnlyList<Event>> GetRecentForDashboardAsync(int maxCount, CancellationToken ct)
+    public async Task<int> CountForDashboardAsync(double? minConfidence, CancellationToken ct)
     {
-        return await _db.Events
-            .AsNoTracking()
-            .Include(e => e.Posts)
-            .OrderByDescending(e => e.LastSeenAtUtc)
-            .Take(maxCount)
+        return await BuildDashboardBaseQuery(minConfidence).CountAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<Event>> GetPageForDashboardAsync(
+        int page,
+        int pageSize,
+        string sort,
+        double? minConfidence,
+        CancellationToken ct)
+    {
+        var skip = (page - 1) * pageSize;
+        IQueryable<Event> query = BuildDashboardBaseQuery(minConfidence)
+            .Include(e => e.Posts);
+
+        query = sort == "confidence"
+            ? query
+                .OrderByDescending(e => e.ConfidenceScore ?? -1)
+                .ThenByDescending(e => e.LastSeenAtUtc)
+                .ThenBy(e => e.Id)
+            : query
+                .OrderByDescending(e => e.LastSeenAtUtc)
+                .ThenBy(e => e.Id);
+
+        return await query
+            .Skip(skip)
+            .Take(pageSize)
             .ToListAsync(ct);
     }
 
@@ -114,5 +135,17 @@ public sealed class EventRepository : IEventRepository
             .OrderByDescending(e => e.LastSeenAtUtc)
             .Take(maxCount)
             .ToListAsync(ct);
+    }
+
+    private IQueryable<Event> BuildDashboardBaseQuery(double? minConfidence)
+    {
+        var query = _db.Events.AsNoTracking().AsQueryable();
+
+        if (minConfidence.HasValue)
+        {
+            query = query.Where(e => e.ConfidenceScore != null && e.ConfidenceScore >= minConfidence.Value);
+        }
+
+        return query;
     }
 }
