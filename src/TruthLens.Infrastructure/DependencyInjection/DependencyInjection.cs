@@ -14,7 +14,9 @@ using TruthLens.Application.Services.Embedding;
 using TruthLens.Infrastructure.Embedding;
 using TruthLens.Application.Repositories.Event;
 using TruthLens.Application.Services.Clustering;
+using TruthLens.Application.Services.Discovery;
 using TruthLens.Application.Services.Summarization;
+using TruthLens.Infrastructure.Discovery;
 using TruthLens.Infrastructure.Summarization;
 using TruthLens.Application.Services.Scoring;
 
@@ -37,8 +39,22 @@ public static class DependencyInjection
         services.AddScoped<IEventRepository, EventRepository>();
         services.AddScoped<ICosineSimilarityService, CosineSimilarityService>();
         services.AddScoped<ClusteringService>();
+        services.AddScoped<SourceDiscoveryService>();
+        services.AddScoped<RecommendedSourcePromotionService>();
         services.AddScoped<SourceConfidenceScoringService>();
         services.AddScoped<EventConfidenceScoringService>();
+
+        services.AddHttpClient<INewsSearchClient, BingNewsSearchClient>(client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(20);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("TruthLens/0.1");
+        });
+
+        services.AddHttpClient<IFeedUrlDiscoveryClient, FeedUrlDiscoveryClient>(client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(15);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("TruthLens/0.1");
+        });
 
 
         services.AddHttpClient<IRssFeedClient, RssFeedClient>(client =>

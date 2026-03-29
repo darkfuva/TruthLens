@@ -26,6 +26,15 @@ public class SourceRepository : ISourceRepository
             .ToListAsync(ct);
     }
 
+    public async Task<IReadOnlyList<string>> GetAllFeedUrlsAsync(CancellationToken ct)
+    {
+        return await _dbContext.Sources
+            .AsNoTracking()
+            .Select(x => x.FeedUrl)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .ToListAsync(ct);
+    }
+
     public async Task<SourceScoringStats> GetScoringStatsAsync(Guid sourceId, DateTimeOffset sinceUtc, CancellationToken ct)
     {
         var recentPosts = _dbContext.Posts

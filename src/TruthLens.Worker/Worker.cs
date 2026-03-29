@@ -5,6 +5,7 @@ using TruthLens.Application.Services.Rss;
 using TruthLens.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using TruthLens.Application.Services.Summarization;
+using TruthLens.Application.Services.Discovery;
 using TruthLens.Application.Services.Scoring;
 namespace TruthLens.Worker;
 
@@ -112,6 +113,109 @@ public sealed class Worker : BackgroundService
 
                 lastPendingEmbedding = pendingEmbedding;
                 lastPendingClustering = pendingClustering;
+            }
+
+            // 3) Discovery pass: find new candidate feeds from recent events/posts.
+            using (var scope = _scopeFactory.CreateScope())
+            {
+                var discoveryService = scope.ServiceProvider.GetRequiredService<SourceDiscoveryService>();
+                var discoveryResult = await discoveryService.DiscoverCandidatesAsync(
+                    maxEvents: 20,
+                    minFeedsPerPost: 5,
+                    stoppingToken);
+
+                _logger.LogInformation(
+                    "Source discovery completed. EventsProcessed={EventsProcessed}, PostsProcessed={PostsProcessed}, PostsMeetingTarget={PostsMeetingTarget}, Added={Added}, Updated={Updated}, TargetPerPost={Target}.",
+                    discoveryResult.EventsProcessed,
+                    discoveryResult.PostsProcessed,
+                    discoveryResult.PostsMeetingTarget,
+                    discoveryResult.CandidatesAdded,
+                    discoveryResult.CandidatesUpdated,
+                    discoveryResult.MinFeedsTarget);
+
+                var sourceConfidenceService = scope.ServiceProvider.GetRequiredService<SourceConfidenceScoringService>();
+                var sourceScoring = await sourceConfidenceService.RecomputeAsync(
+                    maxSources: 250,
+                    maxRecommended: 250,
+                    sinceUtc: DateTimeOffset.UtcNow.AddDays(-30),
+                    stoppingToken);
+
+                _logger.LogInformation(
+                    "Post-discovery source scoring updated. Sources={SourceCount}, Recommended={RecommendedCount}.",
+                    sourceScoring.sourcesUpdated,
+                    sourceScoring.recommendedUpdated);
+
+                var eventConfidenceService = scope.ServiceProvider.GetRequiredService<EventConfidenceScoringService>();
+                var rescoredEvents = await eventConfidenceService.RecomputeRecentConfidenceAsync(200, stoppingToken);
+                _logger.LogInformation("Post-discovery event confidence updated for {Count} events.", rescoredEvents);
+
+                var promotionService = scope.ServiceProvider.GetRequiredService<RecommendedSourcePromotionService>();
+                var autoPromotedCount = await promotionService.PromoteQualifiedAsync(
+                    minConfidence: 0.65,
+                    minSamplePostCount: 2,
+                    maxCount: 25,
+                    stoppingToken);
+                _logger.LogInformation("Auto-promoted {Count} recommended sources.", autoPromotedCount);
+
+                if (autoPromotedCount > 0)
+                {
+                    var ingestionService = scope.ServiceProvider.GetRequiredService<RssIngestionService>();
+                    var insertedAfterPromotion = await ingestionService.IngestAllAsync(stoppingToken);
+                    _logger.LogInformation("Post-promotion ingestion inserted {InsertedCount} posts.", insertedAfterPromotion);
+
+                    var embeddingService = scope.ServiceProvider.GetRequiredService<EmbeddingGenerationService>();
+                    var clusteringService = scope.ServiceProvider.GetRequiredService<ClusteringService>();
+                    var db = scope.ServiceProvider.GetRequiredService<TruthLensDbContext>();
+
+                    var lastPendingEmbeddingAfterPromotion = int.MaxValue;
+                    var lastPendingClusteringAfterPromotion = int.MaxValue;
+                    const int maxPostPromotionIterations = 5;
+
+                    for (var i = 1; i <= maxPostPromotionIterations; i++)
+                    {
+                        var embedded = await embeddingService.GenerateForPendingPostsAsync(embeddingBatchSize, stoppingToken);
+                        var clustered = await clusteringService.ClusterPendingPostsAsync(clusteringBatchSize, clusteringThreshold, stoppingToken);
+
+                        var pendingEmbedding = await db.Posts.CountAsync(p => p.Embedding == null, stoppingToken);
+                        var pendingClustering = await db.Posts.CountAsync(p => p.Embedding != null && p.EventId == null, stoppingToken);
+
+                        _logger.LogInformation(
+                            "Post-promotion iteration {Iteration}: Embedded={Embedded}, Clustered={Clustered}, PendingEmbedding={PendingEmbedding}, PendingClustering={PendingClustering}.",
+                            i,
+                            embedded,
+                            clustered,
+                            pendingEmbedding,
+                            pendingClustering);
+
+                        if (pendingEmbedding == 0 && pendingClustering == 0)
+                        {
+                            break;
+                        }
+
+                        if (pendingEmbedding == lastPendingEmbeddingAfterPromotion &&
+                            pendingClustering == lastPendingClusteringAfterPromotion)
+                        {
+                            _logger.LogWarning("No progress in post-promotion catch-up at iteration {Iteration}.", i);
+                            break;
+                        }
+
+                        lastPendingEmbeddingAfterPromotion = pendingEmbedding;
+                        lastPendingClusteringAfterPromotion = pendingClustering;
+                    }
+
+                    var postPromotionSourceScoring = await sourceConfidenceService.RecomputeAsync(
+                        maxSources: 250,
+                        maxRecommended: 250,
+                        sinceUtc: DateTimeOffset.UtcNow.AddDays(-30),
+                        stoppingToken);
+                    _logger.LogInformation(
+                        "Post-promotion source scoring updated. Sources={SourceCount}, Recommended={RecommendedCount}.",
+                        postPromotionSourceScoring.sourcesUpdated,
+                        postPromotionSourceScoring.recommendedUpdated);
+
+                    var postPromotionEventScoring = await eventConfidenceService.RecomputeRecentConfidenceAsync(200, stoppingToken);
+                    _logger.LogInformation("Post-promotion event confidence updated for {Count} events.", postPromotionEventScoring);
+                }
             }
 
             using (var scope = _scopeFactory.CreateScope())

@@ -138,6 +138,16 @@ public sealed class EventRepository : IEventRepository
             .ToListAsync(ct);
     }
 
+    public async Task<IReadOnlyList<Event>> GetRecentForSourceDiscoveryAsync(DateTimeOffset sinceUtc, int maxCount, CancellationToken ct)
+    {
+        return await _db.Events
+            .Include(e => e.Posts)
+            .Where(e => e.LastSeenAtUtc >= sinceUtc && e.Posts.Any())
+            .OrderByDescending(e => e.LastSeenAtUtc)
+            .Take(maxCount)
+            .ToListAsync(ct);
+    }
+
     private IQueryable<Event> BuildDashboardBaseQuery(double? minConfidence)
     {
         var query = _db.Events.AsNoTracking().AsQueryable();

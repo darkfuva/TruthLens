@@ -40,11 +40,43 @@ public sealed class RecommendedSourceRepository : IRecommendedSourceRepository
         return _db.RecommendedSources.FirstOrDefaultAsync(x => x.Id == id, ct);
     }
 
+    public Task<RecommendedSource?> GetByFeedUrlAsync(string feedUrl, CancellationToken ct)
+    {
+        var normalized = feedUrl.Trim();
+        return _db.RecommendedSources.FirstOrDefaultAsync(x => x.FeedUrl == normalized, ct);
+    }
+
     public async Task<IReadOnlyList<RecommendedSource>> GetForScoringAsync(int maxCount, CancellationToken ct)
     {
         return await _db.RecommendedSources
             .Where(x => x.Status == "pending" || x.Status == "approved")
             .OrderByDescending(x => x.LastSeenAtUtc)
+            .Take(maxCount)
+            .ToListAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<RecommendedSource>> GetAllForDiscoveryAsync(CancellationToken ct)
+    {
+        return await _db.RecommendedSources
+            .Where(x => !string.IsNullOrWhiteSpace(x.FeedUrl))
+            .ToListAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<RecommendedSource>> GetPromotableAsync(
+        double minConfidence,
+        int minSamplePostCount,
+        int maxCount,
+        CancellationToken ct)
+    {
+        return await _db.RecommendedSources
+            .Where(x =>
+                (x.Status == "pending" || x.Status == "approved") &&
+                x.ConfidenceScore != null &&
+                x.ConfidenceScore >= minConfidence &&
+                x.SamplePostCount >= minSamplePostCount)
+            .OrderByDescending(x => x.ConfidenceScore)
+            .ThenByDescending(x => x.SamplePostCount)
+            .ThenByDescending(x => x.LastSeenAtUtc)
             .Take(maxCount)
             .ToListAsync(ct);
     }

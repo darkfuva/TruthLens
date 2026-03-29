@@ -17,5 +17,6 @@ public interface IEventRepository
     Task<IReadOnlyList<Post>> GetRecentPostsForEventAsync(Guid eventId, int maxPosts, CancellationToken ct);
     Task SaveChangesAsync(CancellationToken ct);
     Task<IReadOnlyList<Event>> GetRecentForConfidenceScoringAsync(int maxCount, CancellationToken ct);
+    Task<IReadOnlyList<Event>> GetRecentForSourceDiscoveryAsync(DateTimeOffset sinceUtc, int maxCount, CancellationToken ct);
 
 }

@@ -1,0 +1,32 @@
+.git
+.gitignore
+.vscode
+**/.vs
+**/.idea
+**/*.user
+**/*.suo
+**/*.swp
+**/*.tmp
+
+# Build outputs
+**/bin
+**/obj
+**/out
+**/publish
+
+# Frontend local artifacts
+frontend/**/node_modules
+frontend/**/dist
+
+# .NET local tool/cache artifacts
+**/.nuget
+**/TestResults
+
+# Runtime/dev artifacts not needed in image build context
+**/*.log
+**/*.db
+**/*.sqlite
+**/*.sqlite3
+
+# Local environment files (runtime env vars are passed via docker compose)
+.env
