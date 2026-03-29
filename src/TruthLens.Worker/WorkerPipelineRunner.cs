@@ -106,6 +106,12 @@ public sealed class WorkerPipelineRunner
             discoveryResult.CandidatesUpdated,
             discoveryResult.MinFeedsTarget);
 
+        if (!options.AutoPromoteEnabled)
+        {
+            _logger.LogInformation("Discovery cycle: auto-promotion disabled.");
+            return;
+        }
+
         var autoPromotedCount = await promotionService.PromoteQualifiedAsync(
             minConfidence: options.AutoPromoteMinConfidence,
             minSamplePostCount: Math.Max(1, options.AutoPromoteMinSamplePostCount),
@@ -165,18 +171,22 @@ public sealed class WorkerPipelineRunner
         using var scope = _scopeFactory.CreateScope();
         var sourceConfidenceService = scope.ServiceProvider.GetRequiredService<SourceConfidenceScoringService>();
         var eventConfidenceService = scope.ServiceProvider.GetRequiredService<EventConfidenceScoringService>();
+        var sinceUtc = DateTimeOffset.UtcNow.AddDays(-Math.Max(1, options.LookbackDays));
 
         var sourceScoring = await sourceConfidenceService.RecomputeAsync(
             maxSources: Math.Max(1, options.MaxSources),
             maxRecommended: Math.Max(1, options.MaxRecommended),
-            sinceUtc: DateTimeOffset.UtcNow.AddDays(-Math.Max(1, options.LookbackDays)),
+            sinceUtc: sinceUtc,
             ct);
         _logger.LogInformation(
             "Scoring cycle: source scoring updated. Sources={SourceCount}, Recommended={RecommendedCount}.",
             sourceScoring.sourcesUpdated,
             sourceScoring.recommendedUpdated);
 
-        var rescoredEvents = await eventConfidenceService.RecomputeRecentConfidenceAsync(Math.Max(1, options.MaxEvents), ct);
+        var rescoredEvents = await eventConfidenceService.RecomputeRecentConfidenceAsync(
+            Math.Max(1, options.MaxEvents),
+            sinceUtc,
+            ct);
         _logger.LogInformation("Scoring cycle: event confidence updated for {Count} events.", rescoredEvents);
     }
 

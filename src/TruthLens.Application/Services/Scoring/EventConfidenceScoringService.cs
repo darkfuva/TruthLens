@@ -9,22 +9,37 @@ public sealed class EventConfidenceScoringService
     {
         _eventRepository = eventRepository;
     }
-    public async Task<int> RecomputeRecentConfidenceAsync(int batchSize, CancellationToken ct)
+    public async Task<int> RecomputeRecentConfidenceAsync(int batchSize, DateTimeOffset sinceUtc, CancellationToken ct)
     {
-        var events = await _eventRepository.GetRecentForConfidenceScoringAsync(batchSize, ct);
+        var events = await _eventRepository.GetRecentForConfidenceScoringAsync(batchSize, sinceUtc, ct);
         var now = DateTimeOffset.UtcNow;
 
         foreach (var evt in events)
         {
             var posts = evt.Posts;
-            if (posts.Count == 0)
+            var externalEvidence = evt.ExternalEvidencePosts;
+            if (posts.Count == 0 && externalEvidence.Count == 0)
             {
                 evt.ConfidenceScore = 0;
+                evt.Status = "provisional";
+                evt.ConfirmedAtUtc = null;
                 continue;
             }
 
-            var postCountScore = Clamp01(posts.Count / 20.0);
-            var sourceDiversityScore = Clamp01(posts.Select(p => p.SourceId).Distinct().Count() / 5.0);
+            var totalEvidenceCount = posts.Count + externalEvidence.Count;
+            var postCountScore = Clamp01(totalEvidenceCount / 20.0);
+
+            var internalDomains = posts
+                .Where(p => p.Source is not null && !string.IsNullOrWhiteSpace(p.Source.FeedUrl))
+                .Select(p => GetDomain(p.Source.FeedUrl))
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var externalDomains = externalEvidence
+                .Where(x => x.ExternalSource is not null && !string.IsNullOrWhiteSpace(x.ExternalSource.Domain))
+                .Select(x => NormalizeDomain(x.ExternalSource.Domain))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var corroboratingSources = internalDomains.Union(externalDomains).Count();
+            var sourceDiversityScore = Clamp01(corroboratingSources / 5.0);
 
             var assignmentQualityScore = Clamp01(
                 posts.Where(p => p.ClusterAssignmentScore.HasValue)
@@ -47,6 +62,12 @@ public sealed class EventConfidenceScoringService
                 (0.15 * recencyScore) +
                 (0.15 * sourceConfidenceScore);
 
+            var isConfirmed = corroboratingSources >= 2 && totalEvidenceCount >= 2;
+            evt.Status = isConfirmed ? "confirmed" : "provisional";
+            evt.ConfirmedAtUtc = isConfirmed
+                ? (evt.ConfirmedAtUtc ?? now)
+                : null;
+
             evt.ConfidenceScore = Math.Round(Clamp01(finalScore), 4);
         }
 
@@ -55,4 +76,20 @@ public sealed class EventConfidenceScoringService
     }
 
     private static double Clamp01(double value) => Math.Max(0, Math.Min(1, value));
+
+    private static string GetDomain(string url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+        {
+            return string.Empty;
+        }
+
+        return NormalizeDomain(uri.Host);
+    }
+
+    private static string NormalizeDomain(string value)
+    {
+        var normalized = value.Trim().ToLowerInvariant();
+        return normalized.StartsWith("www.", StringComparison.Ordinal) ? normalized[4..] : normalized;
+    }
 }

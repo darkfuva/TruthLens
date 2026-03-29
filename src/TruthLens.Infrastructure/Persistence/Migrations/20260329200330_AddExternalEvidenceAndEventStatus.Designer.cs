@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Pgvector;
@@ -12,9 +13,11 @@ using TruthLens.Infrastructure.Persistence;
 namespace TruthLens.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(TruthLensDbContext))]
-    partial class TruthLensDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260329200330_AddExternalEvidenceAndEventStatus")]
+    partial class AddExternalEvidenceAndEventStatus
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -48,7 +51,6 @@ namespace TruthLens.Infrastructure.Persistence.Migrations
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(30)
-                        .HasDefaultValue("provisional")
                         .HasColumnType("character varying(30)");
 
                     b.Property<DateTimeOffset?>("SummarizedAtUtc")

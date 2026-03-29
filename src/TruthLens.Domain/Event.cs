@@ -17,8 +17,11 @@ public sealed class Event
 
     // Confidence score can be computed later in Week 3.
     public double? ConfidenceScore { get; set; }
+    public string Status { get; set; } = "provisional";
+    public DateTimeOffset? ConfirmedAtUtc { get; set; }
 
     public ICollection<Post> Posts { get; set; } = new List<Post>();
+    public ICollection<ExternalEvidencePost> ExternalEvidencePosts { get; set; } = new List<ExternalEvidencePost>();
     public string? Summary { get; set; }
     public string? SummaryModel { get; set; }
     public DateTimeOffset? SummarizedAtUtc { get; set; }

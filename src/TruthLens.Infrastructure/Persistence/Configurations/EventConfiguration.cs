@@ -20,6 +20,11 @@ public sealed class EventConfiguration : IEntityTypeConfiguration<Event>
             .HasColumnType("vector(768)");
 
         entity.Property(x => x.ConfidenceScore);
+        entity.Property(x => x.Status)
+            .HasMaxLength(30)
+            .IsRequired()
+            .HasDefaultValue("provisional");
+        entity.Property(x => x.ConfirmedAtUtc);
 
         entity.Property(x => x.FirstSeenAtUtc).IsRequired();
         entity.Property(x => x.LastSeenAtUtc).IsRequired();
@@ -29,5 +34,6 @@ public sealed class EventConfiguration : IEntityTypeConfiguration<Event>
         entity.Property(x => x.SummarizedAtUtc);
 
         entity.HasIndex(x => x.LastSeenAtUtc);
+        entity.HasIndex(x => x.Status);
     }
 }

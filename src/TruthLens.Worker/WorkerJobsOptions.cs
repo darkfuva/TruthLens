@@ -29,6 +29,7 @@ public sealed class DiscoveryOptions : JobOptionsBase
 {
     public int MaxEvents { get; set; } = 20;
     public int MinFeedsPerPost { get; set; } = 5;
+    public bool AutoPromoteEnabled { get; set; } = false;
     public double AutoPromoteMinConfidence { get; set; } = 0.65;
     public int AutoPromoteMinSamplePostCount { get; set; } = 2;
     public int AutoPromoteMaxCount { get; set; } = 25;

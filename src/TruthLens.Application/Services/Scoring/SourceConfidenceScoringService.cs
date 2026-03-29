@@ -24,9 +24,14 @@ public sealed class SourceConfidenceScoringService
         var now = DateTimeOffset.UtcNow;
 
         var sources = await _sourceRepository.GetActiveForScoringAsync(maxSources, ct);
+        var sourceIds = sources.Select(s => s.Id).ToList();
+        var statsMap = await _sourceRepository.GetScoringStatsMapAsync(sourceIds, sinceUtc, ct);
         foreach (var source in sources)
         {
-            var stats = await _sourceRepository.GetScoringStatsAsync(source.Id, sinceUtc, ct);
+            if (!statsMap.TryGetValue(source.Id, out var stats))
+            {
+                stats = new SourceScoringStats(0, 0, null, null);
+            }
 
             var volumeScore = Clamp01(stats.RecentPostCount / 50.0);
             var corroborationRate = stats.RecentPostCount == 0

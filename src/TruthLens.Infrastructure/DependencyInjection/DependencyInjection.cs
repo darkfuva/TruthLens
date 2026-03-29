@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using TruthLens.Application.Repositories.Post;
 using TruthLens.Application.Services.Rss;
 using TruthLens.Application.Repositories.Source;
+using TruthLens.Application.Repositories.External;
 using TruthLens.Infrastructure.Persistence;
 using TruthLens.Infrastructure.Persistence.Repositories;
 using TruthLens.Infrastructure.Rss;
@@ -33,6 +34,8 @@ public static class DependencyInjection
 
         services.AddScoped<ISourceRepository, SourceRepository>();
         services.AddScoped<IRecommendedSourceRepository, RecommendedSourceRepository>();
+        services.AddScoped<IExternalSourceRepository, ExternalSourceRepository>();
+        services.AddScoped<IExternalEvidenceRepository, ExternalEvidenceRepository>();
         services.AddScoped<IPostRepository, PostRepository>();
         services.AddScoped<RssIngestionService>();
         services.AddScoped<EmbeddingGenerationService>();

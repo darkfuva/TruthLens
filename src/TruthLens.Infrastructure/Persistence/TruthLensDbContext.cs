@@ -9,6 +9,8 @@ public sealed class TruthLensDbContext : DbContext
 
     public DbSet<Source> Sources => Set<Source>();
     public DbSet<RecommendedSource> RecommendedSources => Set<RecommendedSource>();
+    public DbSet<ExternalSource> ExternalSources => Set<ExternalSource>();
+    public DbSet<ExternalEvidencePost> ExternalEvidencePosts => Set<ExternalEvidencePost>();
     public DbSet<Post> Posts => Set<Post>();
 
     public DbSet<Event> Events => Set<Event>();

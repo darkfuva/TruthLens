@@ -22,6 +22,7 @@ public sealed class EventsController : ControllerBase
         [FromQuery] int? limit,
         [FromQuery] string? sort,
         [FromQuery] double? minConfidence,
+        [FromQuery] bool includeProvisional,
         CancellationToken ct)
     {
         // Keep backward compatibility with old `limit` query by treating it as pageSize.
@@ -40,7 +41,7 @@ public sealed class EventsController : ControllerBase
             return BadRequest("minConfidence must be between 0 and 1.");
         }
 
-        var totalCount = await _eventRepository.CountForDashboardAsync(minConfidence, ct);
+        var totalCount = await _eventRepository.CountForDashboardAsync(minConfidence, includeProvisional, ct);
         var totalPages = totalCount == 0 ? 0 : (int)Math.Ceiling(totalCount / (double)resolvedPageSize);
 
         var events = await _eventRepository.GetPageForDashboardAsync(
@@ -48,16 +49,20 @@ public sealed class EventsController : ControllerBase
             resolvedPageSize,
             normalizedSort,
             minConfidence,
+            includeProvisional,
             ct);
 
         var items = events.Select(e => new EventListItemResponse(
             e.Id,
             e.Title,
             e.Summary,
+            e.Status,
             e.ConfidenceScore,
             e.FirstSeenAtUtc,
             e.LastSeenAtUtc,
             e.Posts.Count,
+            e.ExternalEvidencePosts.Count,
+            e.Posts.Count + e.ExternalEvidencePosts.Count,
             e.Posts
                 .OrderByDescending(p => p.PublishedAtUtc)
                 .Select(p => p.Title)

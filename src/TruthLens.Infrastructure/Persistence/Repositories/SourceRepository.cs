@@ -65,6 +65,64 @@ public class SourceRepository : ISourceRepository
             latestPublishedAtUtc);
     }
 
+    public async Task<IReadOnlyDictionary<Guid, SourceScoringStats>> GetScoringStatsMapAsync(
+        IReadOnlyCollection<Guid> sourceIds,
+        DateTimeOffset sinceUtc,
+        CancellationToken ct)
+    {
+        if (sourceIds.Count == 0)
+        {
+            return new Dictionary<Guid, SourceScoringStats>();
+        }
+
+        var sourceIdSet = sourceIds.ToHashSet();
+        var recentPosts = _dbContext.Posts
+            .Where(p => sourceIdSet.Contains(p.SourceId) && p.PublishedAtUtc >= sinceUtc);
+
+        var aggregated = await recentPosts
+            .Select(p => new
+            {
+                p.SourceId,
+                p.PublishedAtUtc,
+                p.ClusterAssignmentScore,
+                IsCorroborated = p.EventId != null && _dbContext.Posts.Any(other =>
+                    other.EventId == p.EventId &&
+                    other.SourceId != p.SourceId)
+            })
+            .GroupBy(x => x.SourceId)
+            .Select(g => new
+            {
+                SourceId = g.Key,
+                RecentPostCount = g.Count(),
+                CorroboratedRecentPostCount = g.Count(x => x.IsCorroborated),
+                AverageClusterAssignmentScore = g.Average(x => x.ClusterAssignmentScore),
+                LatestPublishedAtUtc = g.Max(x => (DateTimeOffset?)x.PublishedAtUtc)
+            })
+            .ToListAsync(ct);
+
+        var map = aggregated.ToDictionary(
+            x => x.SourceId,
+            x => new SourceScoringStats(
+                x.RecentPostCount,
+                x.CorroboratedRecentPostCount,
+                x.AverageClusterAssignmentScore,
+                x.LatestPublishedAtUtc));
+
+        foreach (var sourceId in sourceIds)
+        {
+            if (!map.ContainsKey(sourceId))
+            {
+                map[sourceId] = new SourceScoringStats(
+                    RecentPostCount: 0,
+                    CorroboratedRecentPostCount: 0,
+                    AverageClusterAssignmentScore: null,
+                    LatestPublishedAtUtc: null);
+            }
+        }
+
+        return map;
+    }
+
     public Task<bool> ExistsByFeedUrlAsync(string feedUrl, CancellationToken ct)
     {
         var normalized = feedUrl.Trim();

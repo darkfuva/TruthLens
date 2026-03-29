@@ -21,9 +21,9 @@ public sealed class EventRepository : IEventRepository
             .ToListAsync(ct);
     }
 
-    public async Task<int> CountForDashboardAsync(double? minConfidence, CancellationToken ct)
+    public async Task<int> CountForDashboardAsync(double? minConfidence, bool includeProvisional, CancellationToken ct)
     {
-        return await BuildDashboardBaseQuery(minConfidence).CountAsync(ct);
+        return await BuildDashboardBaseQuery(minConfidence, includeProvisional).CountAsync(ct);
     }
 
     public async Task<IReadOnlyList<Event>> GetPageForDashboardAsync(
@@ -31,11 +31,13 @@ public sealed class EventRepository : IEventRepository
         int pageSize,
         string sort,
         double? minConfidence,
+        bool includeProvisional,
         CancellationToken ct)
     {
         var skip = (page - 1) * pageSize;
-        IQueryable<Event> query = BuildDashboardBaseQuery(minConfidence)
-            .Include(e => e.Posts);
+        IQueryable<Event> query = BuildDashboardBaseQuery(minConfidence, includeProvisional)
+            .Include(e => e.Posts)
+            .Include(e => e.ExternalEvidencePosts);
 
         query = sort == "confidence"
             ? query
@@ -127,12 +129,17 @@ public sealed class EventRepository : IEventRepository
     }
 
     public Task SaveChangesAsync(CancellationToken ct) => _db.SaveChangesAsync(ct);
-    public async Task<IReadOnlyList<Event>> GetRecentForConfidenceScoringAsync(int maxCount, CancellationToken ct)
+    public async Task<IReadOnlyList<Event>> GetRecentForConfidenceScoringAsync(int maxCount, DateTimeOffset sinceUtc, CancellationToken ct)
     {
         return await _db.Events
+            .AsSplitQuery()
             .Include(e => e.Posts)
             .ThenInclude(p => p.Source)
-            .Where(e => e.Posts.Any())
+            .Include(e => e.ExternalEvidencePosts)
+            .ThenInclude(x => x.ExternalSource)
+            .Where(e =>
+                e.Posts.Any() &&
+                (e.LastSeenAtUtc >= sinceUtc || e.ConfidenceScore == null || e.Status == "provisional"))
             .OrderByDescending(e => e.LastSeenAtUtc)
             .Take(maxCount)
             .ToListAsync(ct);
@@ -148,9 +155,14 @@ public sealed class EventRepository : IEventRepository
             .ToListAsync(ct);
     }
 
-    private IQueryable<Event> BuildDashboardBaseQuery(double? minConfidence)
+    private IQueryable<Event> BuildDashboardBaseQuery(double? minConfidence, bool includeProvisional)
     {
         var query = _db.Events.AsNoTracking().AsQueryable();
+
+        if (!includeProvisional)
+        {
+            query = query.Where(e => e.Status == "confirmed");
+        }
 
         if (minConfidence.HasValue)
         {
