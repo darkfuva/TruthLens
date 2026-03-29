@@ -30,6 +30,7 @@ public static class DependencyInjection
         services.AddDbContext<TruthLensDbContext>(options => options.UseNpgsql(conn, (o) => o.UseVector()));
 
         services.AddScoped<ISourceRepository, SourceRepository>();
+        services.AddScoped<IRecommendedSourceRepository, RecommendedSourceRepository>();
         services.AddScoped<IPostRepository, PostRepository>();
         services.AddScoped<RssIngestionService>();
         services.AddScoped<EmbeddingGenerationService>();

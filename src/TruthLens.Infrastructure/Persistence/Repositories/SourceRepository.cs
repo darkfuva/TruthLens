@@ -16,4 +16,16 @@ public class SourceRepository : ISourceRepository
     {
         return await _dbContext.Sources.Where(source => source.IsActive).AsNoTracking().ToListAsync(ct);
     }
+
+    public Task<bool> ExistsByFeedUrlAsync(string feedUrl, CancellationToken ct)
+    {
+        var normalized = feedUrl.Trim();
+        return _dbContext.Sources.AnyAsync(x => x.FeedUrl == normalized, ct);
+    }
+
+    public Task AddAsync(Source source, CancellationToken ct) =>
+        _dbContext.Sources.AddAsync(source, ct).AsTask();
+
+    public Task SaveChangesAsync(CancellationToken ct) =>
+        _dbContext.SaveChangesAsync(ct);
 }

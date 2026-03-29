@@ -20,6 +20,13 @@ public sealed class SourceConfiguration : IEntityTypeConfiguration<Source>
             .HasMaxLength(1000)
             .IsRequired();
 
+        entity.Property(x => x.ConfidenceScore);
+
+        entity.Property(x => x.ConfidenceUpdatedAtUtc);
+
+        entity.Property(x => x.ConfidenceModelVersion)
+            .HasMaxLength(100);
+
         entity.HasIndex(x => x.FeedUrl)
             .IsUnique();
     }

@@ -8,6 +8,7 @@ public sealed class TruthLensDbContext : DbContext
     public TruthLensDbContext(DbContextOptions<TruthLensDbContext> options) : base(options) { }
 
     public DbSet<Source> Sources => Set<Source>();
+    public DbSet<RecommendedSource> RecommendedSources => Set<RecommendedSource>();
     public DbSet<Post> Posts => Set<Post>();
 
     public DbSet<Event> Events => Set<Event>();
