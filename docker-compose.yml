@@ -1,7 +1,6 @@
 services:
   db:
     image: pgvector/pgvector:pg16
-    container_name: truthlens
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -10,12 +9,59 @@ services:
       - "5432:5432"
     volumes:
       - truthlens_pgdata:/var/lib/postgresql/data
-      - ./docker/init:/docker-entrypoint-initdb.d
+      - ./docker/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U sahil -d truthlens"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: src/TruthLens.Api/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:5075
+      ConnectionStrings__DefaultConnection: Host=db;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}
+      Ollama__BaseUrl: http://host.docker.internal:11434
+      Ollama__EmbeddingModel: nomic-embed-text
+      Ollama__SummarizationModel: llama3.2:3b
+      Ollama__TimeoutSeconds: 180
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "5075:5075"
+
+  worker:
+    build:
+      context: .
+      dockerfile: src/TruthLens.Worker/Dockerfile
+    environment:
+      ConnectionStrings__DefaultConnection: Host=db;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}
+      Ollama__BaseUrl: http://host.docker.internal:11434
+      Ollama__EmbeddingModel: nomic-embed-text
+      Ollama__SummarizationModel: llama3.2:3b
+      Ollama__TimeoutSeconds: 180
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  dashboard:
+    build:
+      context: ./frontend/dashboard
+      dockerfile: Dockerfile
+    depends_on:
+      api:
+        condition: service_started
+    ports:
+      - "5173:80"
 
 volumes:
   truthlens_pgdata:
