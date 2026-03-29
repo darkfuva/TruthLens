@@ -64,8 +64,19 @@ public sealed class Worker : BackgroundService
                     stoppingToken);
 
 
-                if (clusteredCount > 0)
+                if (embeddedCount > 0 || clusteredCount > 0)
                 {
+                    var sourceConfidenceService = scope.ServiceProvider.GetRequiredService<SourceConfidenceScoringService>();
+                    var sourceScoring = await sourceConfidenceService.RecomputeAsync(
+                        maxSources: 250,
+                        maxRecommended: 250,
+                        sinceUtc: DateTimeOffset.UtcNow.AddDays(-30),
+                        stoppingToken);
+                    _logger.LogInformation(
+                        "Source scoring updated. Sources: {SourceCount}, Recommended: {RecommendedCount}.",
+                        sourceScoring.sourcesUpdated,
+                        sourceScoring.recommendedUpdated);
+
                     var confidenceService = scope.ServiceProvider.GetRequiredService<EventConfidenceScoringService>();
                     var rescored = await confidenceService.RecomputeRecentConfidenceAsync(200, stoppingToken);
                     _logger.LogInformation("Confidence scoring updated for {Count} events.", rescored);

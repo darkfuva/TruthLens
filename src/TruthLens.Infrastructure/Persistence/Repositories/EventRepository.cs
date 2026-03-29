@@ -131,6 +131,7 @@ public sealed class EventRepository : IEventRepository
     {
         return await _db.Events
             .Include(e => e.Posts)
+            .ThenInclude(p => p.Source)
             .Where(e => e.Posts.Any())
             .OrderByDescending(e => e.LastSeenAtUtc)
             .Take(maxCount)

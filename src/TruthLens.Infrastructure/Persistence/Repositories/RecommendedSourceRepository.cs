@@ -40,6 +40,15 @@ public sealed class RecommendedSourceRepository : IRecommendedSourceRepository
         return _db.RecommendedSources.FirstOrDefaultAsync(x => x.Id == id, ct);
     }
 
+    public async Task<IReadOnlyList<RecommendedSource>> GetForScoringAsync(int maxCount, CancellationToken ct)
+    {
+        return await _db.RecommendedSources
+            .Where(x => x.Status == "pending" || x.Status == "approved")
+            .OrderByDescending(x => x.LastSeenAtUtc)
+            .Take(maxCount)
+            .ToListAsync(ct);
+    }
+
     public Task<bool> ExistsByFeedUrlAsync(string feedUrl, CancellationToken ct)
     {
         var normalized = feedUrl.Trim();

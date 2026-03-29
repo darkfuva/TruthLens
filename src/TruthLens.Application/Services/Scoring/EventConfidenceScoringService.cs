@@ -32,14 +32,20 @@ public sealed class EventConfidenceScoringService
                      .DefaultIfEmpty(0.5)
                      .Average());
 
+            var sourceConfidenceScore = Clamp01(
+                posts.Select(p => p.Source?.ConfidenceScore ?? 0.5)
+                    .DefaultIfEmpty(0.5)
+                    .Average());
+
             var recencyHours = (now - evt.LastSeenAtUtc).TotalHours;
             var recencyScore = Clamp01(1 - (recencyHours / (24 * 7.0))); // decays over 7 days
 
             var finalScore =
-                (0.35 * sourceDiversityScore) +
-                (0.25 * postCountScore) +
-                (0.25 * assignmentQualityScore) +
-                (0.15 * recencyScore);
+                (0.28 * sourceDiversityScore) +
+                (0.20 * postCountScore) +
+                (0.22 * assignmentQualityScore) +
+                (0.15 * recencyScore) +
+                (0.15 * sourceConfidenceScore);
 
             evt.ConfidenceScore = Math.Round(Clamp01(finalScore), 4);
         }

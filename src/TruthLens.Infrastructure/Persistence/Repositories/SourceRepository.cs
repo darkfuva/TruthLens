@@ -17,6 +17,45 @@ public class SourceRepository : ISourceRepository
         return await _dbContext.Sources.Where(source => source.IsActive).AsNoTracking().ToListAsync(ct);
     }
 
+    public async Task<IReadOnlyList<Source>> GetActiveForScoringAsync(int maxCount, CancellationToken ct)
+    {
+        return await _dbContext.Sources
+            .Where(source => source.IsActive)
+            .OrderByDescending(x => x.ConfidenceUpdatedAtUtc ?? DateTimeOffset.MinValue)
+            .Take(maxCount)
+            .ToListAsync(ct);
+    }
+
+    public async Task<SourceScoringStats> GetScoringStatsAsync(Guid sourceId, DateTimeOffset sinceUtc, CancellationToken ct)
+    {
+        var recentPosts = _dbContext.Posts
+            .Where(p => p.SourceId == sourceId && p.PublishedAtUtc >= sinceUtc);
+
+        var recentPostCount = await recentPosts.CountAsync(ct);
+
+        var corroboratedRecentPostCount = await recentPosts
+            .Where(p => p.EventId != null)
+            .CountAsync(p =>
+                _dbContext.Posts.Any(other =>
+                    other.EventId == p.EventId &&
+                    other.SourceId != sourceId), ct);
+
+        var averageClusterAssignmentScore = await recentPosts
+            .Where(p => p.ClusterAssignmentScore != null)
+            .Select(p => p.ClusterAssignmentScore)
+            .AverageAsync(ct);
+
+        var latestPublishedAtUtc = await recentPosts
+            .Select(p => (DateTimeOffset?)p.PublishedAtUtc)
+            .MaxAsync(ct);
+
+        return new SourceScoringStats(
+            recentPostCount,
+            corroboratedRecentPostCount,
+            averageClusterAssignmentScore,
+            latestPublishedAtUtc);
+    }
+
     public Task<bool> ExistsByFeedUrlAsync(string feedUrl, CancellationToken ct)
     {
         var normalized = feedUrl.Trim();

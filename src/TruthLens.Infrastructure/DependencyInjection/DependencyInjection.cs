@@ -37,6 +37,7 @@ public static class DependencyInjection
         services.AddScoped<IEventRepository, EventRepository>();
         services.AddScoped<ICosineSimilarityService, CosineSimilarityService>();
         services.AddScoped<ClusteringService>();
+        services.AddScoped<SourceConfidenceScoringService>();
         services.AddScoped<EventConfidenceScoringService>();
 
 
