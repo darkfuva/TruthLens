@@ -36,7 +36,9 @@ public sealed class EventRepository : IEventRepository
     {
         var skip = (page - 1) * pageSize;
         IQueryable<Event> query = BuildDashboardBaseQuery(minConfidence, includeProvisional)
+            .AsSplitQuery()
             .Include(e => e.Posts)
+            .ThenInclude(p => p.Source)
             .Include(e => e.ExternalEvidencePosts);
 
         query = sort == "confidence"

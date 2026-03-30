@@ -5,5 +5,6 @@ public sealed record PagedEventsResponse(
     int PageSize,
     int TotalCount,
     int TotalPages,
-    IReadOnlyList<EventListItemResponse> Items
+    IReadOnlyList<EventListItemResponse> Items,
+    EventGraphResponse Graph
 );

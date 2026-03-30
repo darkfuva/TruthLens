@@ -11,5 +11,6 @@ public sealed record EventListItemResponse(
     int PostCount,
     int ExternalEvidenceCount,
     int TotalEvidenceCount,
-    string? LatestPostTitle
+    string? LatestPostTitle,
+    IReadOnlyList<EventPostItemResponse> Posts
 );
