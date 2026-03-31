@@ -16,9 +16,29 @@ public sealed class EventConfidenceScoringService
 
         foreach (var evt in events)
         {
-            var posts = evt.Posts;
+            var links = evt.PostLinks;
+            var linkedEvidence = links.Count > 0
+                ? links
+                    .Where(l => l.Post is not null)
+                    .Select(l => new
+                    {
+                        Post = l.Post,
+                        Score = Math.Max(0.05, l.RelevanceScore),
+                        Primary = l.IsPrimary
+                    })
+                    .ToList()
+                : evt.Posts
+                    .Select(p => new
+                    {
+                        Post = p,
+                        Score = Math.Max(0.05, p.ClusterAssignmentScore ?? 0.55),
+                        Primary = true
+                    })
+                    .ToList();
+
+            var posts = linkedEvidence.Select(x => x.Post).ToList();
             var externalEvidence = evt.ExternalEvidencePosts;
-            if (posts.Count == 0 && externalEvidence.Count == 0)
+            if (linkedEvidence.Count == 0 && externalEvidence.Count == 0)
             {
                 evt.ConfidenceScore = 0;
                 evt.Status = "provisional";
@@ -26,7 +46,8 @@ public sealed class EventConfidenceScoringService
                 continue;
             }
 
-            var totalEvidenceCount = posts.Count + externalEvidence.Count;
+            var weightedInternalEvidence = linkedEvidence.Sum(x => (x.Primary ? 1.0 : 0.6) * x.Score);
+            var totalEvidenceCount = weightedInternalEvidence + externalEvidence.Count;
             var postCountScore = Clamp01(totalEvidenceCount / 20.0);
 
             var internalDomains = posts
@@ -42,13 +63,12 @@ public sealed class EventConfidenceScoringService
             var sourceDiversityScore = Clamp01(corroboratingSources / 5.0);
 
             var assignmentQualityScore = Clamp01(
-                posts.Where(p => p.ClusterAssignmentScore.HasValue)
-                     .Select(p => p.ClusterAssignmentScore!.Value)
+                linkedEvidence.Select(x => x.Score)
                      .DefaultIfEmpty(0.5)
                      .Average());
 
             var sourceConfidenceScore = Clamp01(
-                posts.Select(p => p.Source?.ConfidenceScore ?? 0.5)
+                linkedEvidence.Select(x => x.Post?.Source?.ConfidenceScore ?? 0.5)
                     .DefaultIfEmpty(0.5)
                     .Average());
 
@@ -62,7 +82,7 @@ public sealed class EventConfidenceScoringService
                 (0.15 * recencyScore) +
                 (0.15 * sourceConfidenceScore);
 
-            var isConfirmed = corroboratingSources >= 2 && totalEvidenceCount >= 2;
+            var isConfirmed = corroboratingSources >= 2 && totalEvidenceCount >= 2.0;
             evt.Status = isConfirmed ? "confirmed" : "provisional";
             evt.ConfirmedAtUtc = isConfirmed
                 ? (evt.ConfirmedAtUtc ?? now)

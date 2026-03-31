@@ -9,4 +9,5 @@ public sealed class OllamaOptions
     public string EmbeddingModel { get; init; } = "nomic-embed-text";
     public int TimeoutSeconds { get; init; } = 60;
     public string SummarizationModel { get; init; } = "llama3.2:3b";
+    public string ExtractionModel { get; init; } = "llama3.2:3b";
 }

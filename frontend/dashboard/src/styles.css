@@ -268,12 +268,36 @@ dd {
   cursor: pointer;
 }
 
-.graph-shell {
+.graph-filters {
+  margin-bottom: 10px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.graph-filters label {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 0.8rem;
+  color: #334155;
+}
+
+.graph-filters input[type="number"] {
+  width: 86px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 5px 8px;
+}
+
+.reactflow-wrapper {
   border: 1px solid #e2e8f0;
   border-radius: 10px;
   background: #f8fafc;
-  min-height: 320px;
-  max-height: 680px;
+  min-height: 420px;
+  height: 62vh;
+  max-height: 720px;
   overflow: auto;
 }
 
@@ -281,65 +305,6 @@ dd {
   margin: 0;
   padding: 12px;
   color: #64748b;
-}
-
-.graph-svg {
-  display: block;
-  width: 100%;
-  min-width: 840px;
-}
-
-.graph-edge {
-  stroke-width: 2;
-  fill: none;
-}
-
-.graph-edge.on {
-  stroke: #334155;
-  opacity: 0.85;
-}
-
-.graph-edge.off {
-  stroke: #94a3b8;
-  opacity: 0.2;
-}
-
-.graph-node {
-  cursor: default;
-}
-
-.graph-node text {
-  fill: #0f172a;
-  font-size: 12px;
-}
-
-.graph-node circle {
-  stroke: #ffffff;
-  stroke-width: 2;
-}
-
-.graph-node.event circle {
-  fill: #f59e0b;
-}
-
-.graph-node.post {
-  cursor: pointer;
-}
-
-.graph-node.post circle {
-  fill: #2563eb;
-}
-
-.graph-node.source circle {
-  fill: #16a34a;
-}
-
-.graph-node.on {
-  opacity: 1;
-}
-
-.graph-node.off {
-  opacity: 0.25;
 }
 
 .graph-legend {

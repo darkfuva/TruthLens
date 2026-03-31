@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Options;
+using System.Diagnostics;
 
 namespace TruthLens.Worker;
 
@@ -23,6 +24,8 @@ public abstract class PeriodicJobBackgroundService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        var firstIteration = true;
+
         while (!stoppingToken.IsCancellationRequested)
         {
             var options = _optionsMonitor.CurrentValue;
@@ -32,7 +35,18 @@ public abstract class PeriodicJobBackgroundService : BackgroundService
             {
                 if (job.Enabled)
                 {
-                    await RunJobOnceAsync(options, stoppingToken);
+                    if (firstIteration && !job.RunOnStart)
+                    {
+                        _logger.LogInformation("{JobName} startup run skipped (RunOnStart=false).", _jobName);
+                    }
+                    else
+                    {
+                        var sw = Stopwatch.StartNew();
+                        _logger.LogInformation("{JobName} cycle started.", _jobName);
+                        await RunJobOnceAsync(options, stoppingToken);
+                        sw.Stop();
+                        _logger.LogInformation("{JobName} cycle completed in {ElapsedMs} ms.", _jobName, sw.ElapsedMilliseconds);
+                    }
                 }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -43,30 +57,13 @@ public abstract class PeriodicJobBackgroundService : BackgroundService
             {
                 _logger.LogError(ex, "{JobName} failed.", _jobName);
             }
+            finally
+            {
+                firstIteration = false;
+            }
 
             var delaySeconds = Math.Max(5, job.IntervalSeconds);
             await Task.Delay(TimeSpan.FromSeconds(delaySeconds), stoppingToken);
         }
-    }
-
-    public override async Task StartAsync(CancellationToken cancellationToken)
-    {
-        var options = _optionsMonitor.CurrentValue;
-        var job = GetJobOptions(options);
-
-        // Run once at startup when enabled, then continue periodic loop.
-        if (job.Enabled && job.RunOnStart)
-        {
-            try
-            {
-                await RunJobOnceAsync(options, cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "{JobName} startup run failed.", _jobName);
-            }
-        }
-
-        await base.StartAsync(cancellationToken);
     }
 }

@@ -8,6 +8,7 @@ public sealed class WorkerJobsOptions
     public DiscoveryOptions Discovery { get; set; } = new();
     public ScoringOptions Scoring { get; set; } = new();
     public SummarizationOptions Summarization { get; set; } = new();
+    public BackfillOptions Backfill { get; set; } = new();
 }
 
 public class JobOptionsBase
@@ -48,4 +49,10 @@ public sealed class SummarizationOptions : JobOptionsBase
 {
     public int BatchSize { get; set; } = 10;
     public int MaxIterations { get; set; } = 20;
+}
+
+public sealed class BackfillOptions : JobOptionsBase
+{
+    public int LookbackDays { get; set; } = 30;
+    public int BatchSize { get; set; } = 300;
 }

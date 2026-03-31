@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
+import ReactFlow, { Background, Controls, MiniMap } from "reactflow";
+import "reactflow/dist/style.css";
 
 const EMPTY_GRAPH = { nodes: [], edges: [] };
+const EDGE_TYPE_OPTIONS = ["POST_EVENT", "EVENT_EVENT", "POST_SOURCE"];
 
 function formatDate(value) {
   return new Date(value).toLocaleString();
@@ -19,78 +22,150 @@ function truncate(value, maxLength) {
   return `${value.slice(0, maxLength - 1)}...`;
 }
 
-function buildGraphRenderState(graph, selectedPostId) {
-  const nodes = Array.isArray(graph?.nodes) ? graph.nodes : [];
-  const edges = Array.isArray(graph?.edges) ? graph.edges : [];
+function getNodeColor(nodeType) {
+  if (nodeType === "event") return "#f59e0b";
+  if (nodeType === "post") return "#2563eb";
+  if (nodeType === "source") return "#16a34a";
+  return "#64748b";
+}
 
-  const byType = {
+function getEdgeColor(edgeType, relationType) {
+  if (edgeType === "POST_EVENT") return relationType === "PRIMARY" ? "#1d4ed8" : "#60a5fa";
+  if (edgeType === "POST_SOURCE") return "#16a34a";
+  if (edgeType === "EVENT_EVENT") {
+    if (relationType === "FOLLOWUP") return "#a855f7";
+    if (relationType === "SUBEVENT_OF") return "#ec4899";
+    return "#f59e0b";
+  }
+
+  return "#94a3b8";
+}
+
+function buildFlowGraph(graph, selectedPostId, edgeTypeFilter, minRelationStrength) {
+  const sourceNodes = Array.isArray(graph?.nodes) ? graph.nodes : [];
+  const sourceEdges = Array.isArray(graph?.edges) ? graph.edges : [];
+
+  const filteredEdges = sourceEdges.filter((edge) => {
+    if (!edgeTypeFilter.has(edge.edgeType)) return false;
+    if (edge.edgeType === "EVENT_EVENT") {
+      const strength = typeof edge.strength === "number" ? edge.strength : 0;
+      if (strength < minRelationStrength) return false;
+    }
+
+    return true;
+  });
+
+  const nodeMap = new Map(sourceNodes.map((node) => [node.nodeId, node]));
+  const connectedNodeIds = new Set();
+
+  for (const edge of filteredEdges) {
+    connectedNodeIds.add(edge.fromNodeId);
+    connectedNodeIds.add(edge.toNodeId);
+  }
+
+  const selectedNodeId = selectedPostId ? `post:${selectedPostId}` : null;
+  const highlightNodes = new Set();
+  const highlightEdges = new Set();
+
+  if (selectedNodeId) {
+    highlightNodes.add(selectedNodeId);
+    for (const edge of filteredEdges) {
+      if (edge.fromNodeId === selectedNodeId || edge.toNodeId === selectedNodeId) {
+        highlightEdges.add(edge.edgeId);
+        highlightNodes.add(edge.fromNodeId);
+        highlightNodes.add(edge.toNodeId);
+      }
+    }
+  }
+
+  const buckets = {
     event: [],
     post: [],
     source: [],
     other: [],
   };
 
-  for (const node of nodes) {
-    if (node.nodeType === "event") byType.event.push(node);
-    else if (node.nodeType === "post") byType.post.push(node);
-    else if (node.nodeType === "source") byType.source.push(node);
-    else byType.other.push(node);
+  for (const node of sourceNodes) {
+    if (!connectedNodeIds.has(node.nodeId)) continue;
+
+    if (node.nodeType === "event") buckets.event.push(node);
+    else if (node.nodeType === "post") buckets.post.push(node);
+    else if (node.nodeType === "source") buckets.source.push(node);
+    else buckets.other.push(node);
   }
 
-  byType.event.sort((a, b) => a.label.localeCompare(b.label));
-  byType.post.sort((a, b) => a.label.localeCompare(b.label));
-  byType.source.sort((a, b) => a.label.localeCompare(b.label));
-  byType.other.sort((a, b) => a.label.localeCompare(b.label));
-
-  const columnX = {
-    event: 130,
-    post: 430,
-    source: 730,
-    other: 730,
-  };
-
-  const nodePositions = {};
-  let maxY = 80;
-
-  for (const [type, bucket] of Object.entries(byType)) {
-    for (let i = 0; i < bucket.length; i += 1) {
-      const y = 70 + i * 68;
-      nodePositions[bucket[i].nodeId] = { x: columnX[type], y };
-      maxY = Math.max(maxY, y);
-    }
+  for (const key of Object.keys(buckets)) {
+    buckets[key].sort((a, b) => a.label.localeCompare(b.label));
   }
 
-  const selectedNodeId = selectedPostId ? `post:${selectedPostId}` : null;
-  const highlightedNodeIds = new Set();
-  const highlightedEdgeIds = new Set();
+  const columnX = { event: 120, post: 440, source: 760, other: 760 };
+  const verticalGap = 70;
+  const startY = 60;
+  const positions = new Map();
 
-  if (selectedNodeId) {
-    highlightedNodeIds.add(selectedNodeId);
-    for (const edge of edges) {
-      if (edge.fromNodeId === selectedNodeId || edge.toNodeId === selectedNodeId) {
-        highlightedEdgeIds.add(edge.edgeId);
-        highlightedNodeIds.add(edge.fromNodeId);
-        highlightedNodeIds.add(edge.toNodeId);
-      }
-    }
+  for (const [type, items] of Object.entries(buckets)) {
+    items.forEach((node, index) => {
+      positions.set(node.nodeId, { x: columnX[type], y: startY + index * verticalGap });
+    });
   }
 
-  return {
-    nodes,
-    edges,
-    nodePositions,
-    highlightedNodeIds,
-    highlightedEdgeIds,
-    width: 860,
-    height: Math.max(maxY + 80, 320),
-  };
+  const nodes = [...buckets.event, ...buckets.post, ...buckets.source, ...buckets.other].map((node) => {
+    const position = positions.get(node.nodeId) ?? { x: 50, y: 50 };
+    const isHighlighted = !selectedNodeId || highlightNodes.has(node.nodeId);
+
+    return {
+      id: node.nodeId,
+      data: { label: truncate(node.label, 44), nodeType: node.nodeType, postId: node.postId },
+      position,
+      draggable: false,
+      selectable: true,
+      style: {
+        borderRadius: node.nodeType === "event" ? "14px" : "10px",
+        border: `2px solid ${getNodeColor(node.nodeType)}`,
+        background: node.nodeType === "event" ? "#fffbeb" : "#f8fafc",
+        color: "#0f172a",
+        fontSize: 12,
+        width: node.nodeType === "event" ? 240 : 220,
+        opacity: isHighlighted ? 1 : 0.25,
+      },
+    };
+  });
+
+  const edges = filteredEdges
+    .filter((edge) => nodeMap.has(edge.fromNodeId) && nodeMap.has(edge.toNodeId))
+    .map((edge) => {
+      const isHighlighted = !selectedNodeId || highlightEdges.has(edge.edgeId);
+      const label =
+        edge.edgeType === "EVENT_EVENT"
+          ? `${edge.relationType ?? "RELATED"} ${typeof edge.strength === "number" ? `(${edge.strength.toFixed(2)})` : ""}`.trim()
+          : edge.edgeType;
+
+      return {
+        id: edge.edgeId,
+        source: edge.fromNodeId,
+        target: edge.toNodeId,
+        type: "smoothstep",
+        animated: edge.edgeType === "EVENT_EVENT" && isHighlighted,
+        label,
+        style: {
+          stroke: getEdgeColor(edge.edgeType, edge.relationType),
+          strokeWidth: edge.edgeType === "EVENT_EVENT" ? 2.2 : 1.8,
+          opacity: isHighlighted ? 0.95 : 0.18,
+        },
+        labelStyle: { fontSize: 10, fill: "#334155" },
+      };
+    });
+
+  return { nodes, edges };
 }
 
 export default function App() {
   const [events, setEvents] = useState([]);
   const [graph, setGraph] = useState(EMPTY_GRAPH);
   const [loading, setLoading] = useState(true);
+  const [graphLoading, setGraphLoading] = useState(true);
   const [error, setError] = useState("");
+  const [graphError, setGraphError] = useState("");
   const [sort, setSort] = useState("recent");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -98,6 +173,8 @@ export default function App() {
   const [totalPages, setTotalPages] = useState(0);
   const [minConfidence, setMinConfidence] = useState("");
   const [selectedPostId, setSelectedPostId] = useState(null);
+  const [edgeTypeFilter, setEdgeTypeFilter] = useState(new Set(EDGE_TYPE_OPTIONS));
+  const [minRelationStrength, setMinRelationStrength] = useState(0.7);
 
   useEffect(() => {
     let mounted = true;
@@ -111,32 +188,17 @@ export default function App() {
         params.set("page", String(page));
         params.set("pageSize", String(pageSize));
         params.set("sort", sort);
-        if (minConfidence !== "") {
-          params.set("minConfidence", minConfidence);
-        }
+        params.set("includeProvisional", "true");
+        if (minConfidence !== "") params.set("minConfidence", minConfidence);
 
         const response = await fetch(`/api/events?${params.toString()}`);
-        if (!response.ok) {
-          throw new Error(`Request failed with status ${response.status}`);
-        }
+        if (!response.ok) throw new Error(`Request failed with status ${response.status}`);
 
         const data = await response.json();
         if (mounted) {
-          const items = data.items ?? [];
-          const nextGraph = data.graph ?? EMPTY_GRAPH;
-
-          setEvents(items);
-          setGraph(nextGraph);
+          setEvents(data.items ?? []);
           setTotalCount(data.totalCount ?? 0);
           setTotalPages(data.totalPages ?? 0);
-
-          if (selectedPostId) {
-            const postNodeId = `post:${selectedPostId}`;
-            const stillExists = (nextGraph.nodes ?? []).some((x) => x.nodeId === postNodeId);
-            if (!stillExists) {
-              setSelectedPostId(null);
-            }
-          }
         }
       } catch (err) {
         if (mounted) setError(err.message || "Failed to load events");
@@ -151,22 +213,62 @@ export default function App() {
     };
   }, [minConfidence, page, pageSize, sort]);
 
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadGraph() {
+      setGraphLoading(true);
+      setGraphError("");
+
+      try {
+        const params = new URLSearchParams();
+        params.set("sort", sort);
+        params.set("maxEvents", "220");
+        params.set("includeProvisional", "true");
+        if (minConfidence !== "") params.set("minConfidence", minConfidence);
+
+        const response = await fetch(`/api/events/graph?${params.toString()}`);
+        if (!response.ok) throw new Error(`Graph request failed with status ${response.status}`);
+
+        const data = await response.json();
+        if (mounted) {
+          setGraph(data ?? EMPTY_GRAPH);
+
+          if (selectedPostId) {
+            const postNodeId = `post:${selectedPostId}`;
+            const exists = (data?.nodes ?? []).some((node) => node.nodeId === postNodeId);
+            if (!exists) setSelectedPostId(null);
+          }
+        }
+      } catch (err) {
+        if (mounted) setGraphError(err.message || "Failed to load graph");
+      } finally {
+        if (mounted) setGraphLoading(false);
+      }
+    }
+
+    loadGraph();
+    return () => {
+      mounted = false;
+    };
+  }, [minConfidence, sort, selectedPostId]);
+
   const stats = useMemo(() => {
     const withSummary = events.filter((x) => x.summary).length;
     const totalPosts = events.reduce((sum, x) => sum + x.postCount, 0);
     return { withSummary, totalPosts };
   }, [events]);
 
-  const graphState = useMemo(
-    () => buildGraphRenderState(graph, selectedPostId),
-    [graph, selectedPostId],
+  const flowGraph = useMemo(
+    () => buildFlowGraph(graph, selectedPostId, edgeTypeFilter, minRelationStrength),
+    [graph, selectedPostId, edgeTypeFilter, minRelationStrength],
   );
 
   return (
     <main className="page">
       <header className="hero">
         <h1>TruthLens Event Dashboard</h1>
-        <p>Live clustered news events with AI summaries.</p>
+        <p>Live clustered news events with AI summaries and graph-native linking.</p>
       </header>
 
       <section className="stats">
@@ -235,9 +337,7 @@ export default function App() {
         <button type="button" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>
           Previous
         </button>
-        <span>
-          Page {page} of {Math.max(totalPages, 1)}
-        </span>
+        <span>Page {page} of {Math.max(totalPages, 1)}</span>
         <button
           type="button"
           onClick={() => setPage((p) => (totalPages > 0 ? Math.min(totalPages, p + 1) : p + 1))}
@@ -260,10 +360,7 @@ export default function App() {
                   <span>{event.postCount} posts</span>
                 </div>
                 <div className={getConfidenceClass(event.confidenceScore)}>
-                  Confidence:{" "}
-                  {typeof event.confidenceScore === "number"
-                    ? event.confidenceScore.toFixed(3)
-                    : "N/A"}
+                  Confidence: {typeof event.confidenceScore === "number" ? event.confidenceScore.toFixed(3) : "N/A"}
                 </div>
 
                 <p className="summary">{event.summary || "Summary pending..."}</p>
@@ -305,8 +402,8 @@ export default function App() {
 
           <aside className="graph-panel">
             <div className="graph-head">
-              <h2>Evidence Graph</h2>
-              <p>Click a post chip to highlight its graph node and links.</p>
+              <h2>Event Graph (React Flow)</h2>
+              <p>Click post chips to highlight related nodes and edges.</p>
               {selectedPostId && (
                 <button type="button" onClick={() => setSelectedPostId(null)}>
                   Clear Selection
@@ -314,64 +411,57 @@ export default function App() {
               )}
             </div>
 
-            <div className="graph-shell">
-              {graphState.nodes.length === 0 ? (
-                <p className="graph-empty">No graph nodes for this page yet.</p>
-              ) : (
-                <svg
-                  className="graph-svg"
-                  viewBox={`0 0 ${graphState.width} ${graphState.height}`}
-                  role="img"
-                  aria-label="Event-post-source graph"
+            <div className="graph-filters">
+              {EDGE_TYPE_OPTIONS.map((edgeType) => (
+                <label key={edgeType}>
+                  <input
+                    type="checkbox"
+                    checked={edgeTypeFilter.has(edgeType)}
+                    onChange={(e) => {
+                      const next = new Set(edgeTypeFilter);
+                      if (e.target.checked) next.add(edgeType);
+                      else next.delete(edgeType);
+                      setEdgeTypeFilter(next);
+                    }}
+                  />
+                  {edgeType}
+                </label>
+              ))}
+              <label>
+                Min Event Relation Strength
+                <input
+                  type="number"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value={minRelationStrength}
+                  onChange={(e) => setMinRelationStrength(Math.max(0, Math.min(1, Number(e.target.value) || 0)))}
+                />
+              </label>
+            </div>
+
+            <div className="reactflow-wrapper">
+              {graphLoading && <p className="graph-empty">Loading graph...</p>}
+              {!graphLoading && graphError && <p className="status error">{graphError}</p>}
+              {!graphLoading && !graphError && flowGraph.nodes.length === 0 && (
+                <p className="graph-empty">No graph data for current filters.</p>
+              )}
+              {!graphLoading && !graphError && flowGraph.nodes.length > 0 && (
+                <ReactFlow
+                  nodes={flowGraph.nodes}
+                  edges={flowGraph.edges}
+                  fitView
+                  attributionPosition="bottom-left"
+                  onNodeClick={(_, node) => {
+                    if (node?.data?.postId) {
+                      setSelectedPostId(node.data.postId);
+                    }
+                  }}
                 >
-                  {graphState.edges.map((edge) => {
-                    const from = graphState.nodePositions[edge.fromNodeId];
-                    const to = graphState.nodePositions[edge.toNodeId];
-                    if (!from || !to) return null;
-
-                    const highlighted =
-                      !selectedPostId || graphState.highlightedEdgeIds.has(edge.edgeId);
-
-                    return (
-                      <line
-                        key={edge.edgeId}
-                        x1={from.x}
-                        y1={from.y}
-                        x2={to.x}
-                        y2={to.y}
-                        className={`graph-edge ${highlighted ? "on" : "off"}`}
-                      />
-                    );
-                  })}
-
-                  {graphState.nodes.map((node) => {
-                    const position = graphState.nodePositions[node.nodeId];
-                    if (!position) return null;
-
-                    const highlighted =
-                      !selectedPostId || graphState.highlightedNodeIds.has(node.nodeId);
-                    const radius =
-                      node.nodeType === "event" ? 16 : node.nodeType === "post" ? 12 : 10;
-
-                    return (
-                      <g
-                        key={node.nodeId}
-                        transform={`translate(${position.x}, ${position.y})`}
-                        className={`graph-node ${node.nodeType} ${highlighted ? "on" : "off"}`}
-                        onClick={() => {
-                          if (node.nodeType === "post" && node.postId) {
-                            setSelectedPostId(node.postId);
-                          }
-                        }}
-                      >
-                        <circle r={radius} />
-                        <text x={18} y={5}>
-                          {truncate(node.label, 42)}
-                        </text>
-                      </g>
-                    );
-                  })}
-                </svg>
+                  <MiniMap nodeStrokeWidth={3} />
+                  <Controls />
+                  <Background gap={18} size={1} />
+                </ReactFlow>
               )}
             </div>
 

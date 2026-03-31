@@ -43,6 +43,16 @@ public sealed class PostConfiguration : IEntityTypeConfiguration<Post>
             .HasForeignKey(x => x.EventId)
             .OnDelete(DeleteBehavior.SetNull);
 
+        entity.HasMany(x => x.EventLinks)
+            .WithOne(x => x.Post)
+            .HasForeignKey(x => x.PostId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        entity.HasMany(x => x.ExtractedEventCandidates)
+            .WithOne(x => x.Post)
+            .HasForeignKey(x => x.PostId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         entity.HasIndex(x => new { x.SourceId, x.ExternalId })
             .IsUnique();
     }

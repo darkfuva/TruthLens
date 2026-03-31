@@ -26,6 +26,22 @@ public sealed class PostRepository : IPostRepository
     {
         return _db.SaveChangesAsync(ct);
     }
+
+    public async Task<HashSet<Guid>> GetExistingIdsAsync(IReadOnlyCollection<Guid> postIds, CancellationToken ct)
+    {
+        if (postIds.Count == 0)
+        {
+            return new HashSet<Guid>();
+        }
+
+        var ids = await _db.Posts
+            .Where(x => postIds.Contains(x.Id))
+            .Select(x => x.Id)
+            .ToListAsync(ct);
+
+        return ids.ToHashSet();
+    }
+
     public async Task<IReadOnlyList<Post>> GetUnembeddedBatchAsync(int batchSize, CancellationToken ct)
     {
         // tracked query because we will update entities and call SaveChangesAsync
@@ -40,6 +56,23 @@ public sealed class PostRepository : IPostRepository
         return await _db.Posts
             .Where(p => p.EventId == null && p.Embedding != null)
             .OrderBy(p => p.PublishedAtUtc)
+            .Take(batchSize)
+            .ToListAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<Post>> GetEmbeddedWithoutPrimaryLinkBatchAsync(int batchSize, DateTimeOffset? sinceUtc, CancellationToken ct)
+    {
+        var query = _db.Posts
+            .Include(x => x.Source)
+            .Where(x => x.Embedding != null && !x.EventLinks.Any(l => l.IsPrimary));
+
+        if (sinceUtc.HasValue)
+        {
+            query = query.Where(x => x.PublishedAtUtc >= sinceUtc.Value);
+        }
+
+        return await query
+            .OrderByDescending(x => x.PublishedAtUtc)
             .Take(batchSize)
             .ToListAsync(ct);
     }

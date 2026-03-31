@@ -4,5 +4,7 @@ public sealed record EventGraphEdgeResponse(
     string EdgeId,
     string EdgeType,
     string FromNodeId,
-    string ToNodeId
+    string ToNodeId,
+    string? RelationType,
+    double? Strength
 );

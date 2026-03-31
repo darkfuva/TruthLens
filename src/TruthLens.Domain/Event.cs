@@ -21,6 +21,9 @@ public sealed class Event
     public DateTimeOffset? ConfirmedAtUtc { get; set; }
 
     public ICollection<Post> Posts { get; set; } = new List<Post>();
+    public ICollection<PostEventLink> PostLinks { get; set; } = new List<PostEventLink>();
+    public ICollection<EventRelation> OutgoingRelations { get; set; } = new List<EventRelation>();
+    public ICollection<EventRelation> IncomingRelations { get; set; } = new List<EventRelation>();
     public ICollection<ExternalEvidencePost> ExternalEvidencePosts { get; set; } = new List<ExternalEvidencePost>();
     public string? Summary { get; set; }
     public string? SummaryModel { get; set; }

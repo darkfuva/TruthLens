@@ -19,7 +19,20 @@ public sealed class OllamaEventSummarizer : IEventSummarizer
 
     public async Task<string> SummarizeAsync(string context, CancellationToken ct)
     {
-        var prompt = "Summarize the event in 3-5 factual sentences. Avoid speculation.\n\n" + context;
+        var prompt = """
+                     You are an evidence-grounded news analyst.
+                     Write a factual event summary using ONLY supplied evidence.
+
+                     Output rules:
+                     - 4 to 6 sentences.
+                     - No speculation, no invented facts.
+                     - Mention uncertainty explicitly when evidence is incomplete/conflicting.
+                     - If an important detail is missing, say "unknown".
+                     - Keep neutral tone.
+
+                     Evidence bundle:
+                     """
+                     + "\n\n" + context;
 
         var request = new
         {

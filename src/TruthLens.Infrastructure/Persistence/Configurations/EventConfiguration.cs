@@ -33,6 +33,21 @@ public sealed class EventConfiguration : IEntityTypeConfiguration<Event>
         entity.Property(x => x.SummaryModel).HasMaxLength(100);
         entity.Property(x => x.SummarizedAtUtc);
 
+        entity.HasMany(x => x.PostLinks)
+            .WithOne(x => x.Event)
+            .HasForeignKey(x => x.EventId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        entity.HasMany(x => x.OutgoingRelations)
+            .WithOne(x => x.FromEvent)
+            .HasForeignKey(x => x.FromEventId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        entity.HasMany(x => x.IncomingRelations)
+            .WithOne(x => x.ToEvent)
+            .HasForeignKey(x => x.ToEventId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         entity.HasIndex(x => x.LastSeenAtUtc);
         entity.HasIndex(x => x.Status);
     }

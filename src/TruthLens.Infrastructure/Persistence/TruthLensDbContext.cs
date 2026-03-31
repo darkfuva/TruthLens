@@ -12,6 +12,9 @@ public sealed class TruthLensDbContext : DbContext
     public DbSet<ExternalSource> ExternalSources => Set<ExternalSource>();
     public DbSet<ExternalEvidencePost> ExternalEvidencePosts => Set<ExternalEvidencePost>();
     public DbSet<Post> Posts => Set<Post>();
+    public DbSet<PostEventLink> PostEventLinks => Set<PostEventLink>();
+    public DbSet<EventRelation> EventRelations => Set<EventRelation>();
+    public DbSet<ExtractedEventCandidate> ExtractedEventCandidates => Set<ExtractedEventCandidate>();
 
     public DbSet<Event> Events => Set<Event>();
     protected override void OnModelCreating(ModelBuilder modelBuilder)

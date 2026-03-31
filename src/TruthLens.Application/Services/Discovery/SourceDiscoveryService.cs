@@ -12,7 +12,7 @@ public sealed class SourceDiscoveryService
 {
     private const int PostParallelism = 64;
     private const int FeedValidationParallelism = 64;
-    private const int SaveBatchSize = 50;
+    private const int SaveBatchSize = 10;
 
     private static readonly ConcurrentDictionary<string, (DateTimeOffset ExpiresAtUtc, IReadOnlyList<SearchNewsItem> Hits)> SearchCache =
         new(StringComparer.OrdinalIgnoreCase);
@@ -88,10 +88,23 @@ public sealed class SourceDiscoveryService
             StringComparer.OrdinalIgnoreCase);
 
         var workItems = events
-            .SelectMany((evt, eventIndex) => evt.Posts
-                .Where(p => !string.IsNullOrWhiteSpace(p.Title) || !string.IsNullOrWhiteSpace(p.Url))
-                .OrderByDescending(p => p.PublishedAtUtc)
-                .Select(post => new DiscoveryWorkItem(evt, post, eventIndex + 1, events.Count)))
+            .SelectMany((evt, eventIndex) =>
+            {
+                var linkedPosts = evt.PostLinks
+                    .Select(l => l.Post)
+                    .Where(p => p is not null)
+                    .DistinctBy(p => p.Id)
+                    .ToList();
+
+                var candidatePosts = linkedPosts.Count > 0
+                    ? linkedPosts
+                    : evt.Posts.ToList();
+
+                return candidatePosts
+                    .Where(p => !string.IsNullOrWhiteSpace(p.Title) || !string.IsNullOrWhiteSpace(p.Url))
+                    .OrderByDescending(p => p.PublishedAtUtc)
+                    .Select(post => new DiscoveryWorkItem(evt, post, eventIndex + 1, events.Count));
+            })
             .ToList();
 
         var totalPosts = workItems.Count;
@@ -106,39 +119,6 @@ public sealed class SourceDiscoveryService
                 MinFeedsTarget: minFeedsPerPost);
         }
 
-        var startedAtUtc = DateTimeOffset.UtcNow;
-        var completedPosts = 0;
-        var postGate = new SemaphoreSlim(PostParallelism, PostParallelism);
-        var feedValidationGate = new SemaphoreSlim(FeedValidationParallelism, FeedValidationParallelism);
-
-        RenderProgress(0, totalPosts, startedAtUtc, "starting");
-
-        var computeTasks = workItems.Select(async workItem =>
-        {
-            await postGate.WaitAsync(ct);
-            try
-            {
-                var result = await DiscoverForPostAsync(
-                    workItem,
-                    minFeedsPerPost,
-                    sourceFeedKeys,
-                    feedValidationGate,
-                    apiMetrics,
-                    ct);
-
-                var done = Interlocked.Increment(ref completedPosts);
-                RenderProgress(done, totalPosts, startedAtUtc, $"last post={result.PostId}");
-                return result;
-            }
-            finally
-            {
-                postGate.Release();
-            }
-        }).ToArray();
-
-        var computed = await Task.WhenAll(computeTasks);
-        CompleteProgressLine();
-
         var existingEvidenceUrlsByEvent = new Dictionary<Guid, HashSet<string>>();
         foreach (var evt in events)
         {
@@ -152,122 +132,175 @@ public sealed class SourceDiscoveryService
         var postsProcessed = 0;
         var pendingMutations = 0;
 
-        foreach (var result in computed)
+        var startedAtUtc = DateTimeOffset.UtcNow;
+        var completedPosts = 0;
+        using var postGate = new SemaphoreSlim(PostParallelism, PostParallelism);
+        using var feedValidationGate = new SemaphoreSlim(FeedValidationParallelism, FeedValidationParallelism);
+
+        RenderProgress(0, totalPosts, startedAtUtc, "starting");
+
+        var computeTasks = workItems
+            .Select(async workItem =>
+            {
+                await postGate.WaitAsync(ct);
+                try
+                {
+                    var result = await DiscoverForPostAsync(
+                        workItem,
+                        minFeedsPerPost,
+                        sourceFeedKeys,
+                        feedValidationGate,
+                        apiMetrics,
+                        ct);
+
+                    var done = Interlocked.Increment(ref completedPosts);
+                    RenderProgress(done, totalPosts, startedAtUtc, $"last post={result.PostId}");
+                    return result;
+                }
+                finally
+                {
+                    postGate.Release();
+                }
+            })
+            .ToList();
+
+        try
         {
-            ct.ThrowIfCancellationRequested();
-            postsProcessed++;
-            if (result.MeetsTarget)
+            while (computeTasks.Count > 0)
             {
-                postsMeetingTarget++;
-            }
+                ct.ThrowIfCancellationRequested();
+                var completedTask = await Task.WhenAny(computeTasks);
+                computeTasks.Remove(completedTask);
+                var result = await completedTask;
 
-            var mutated = false;
-            if (!existingEvidenceUrlsByEvent.TryGetValue(result.EventId, out var existingEvidenceUrls))
-            {
-                existingEvidenceUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                existingEvidenceUrlsByEvent[result.EventId] = existingEvidenceUrls;
-            }
-
-            foreach (var evidence in result.ExternalEvidenceCandidates)
-            {
-                if (!existingEvidenceUrls.Add(evidence.Url))
+                postsProcessed++;
+                if (result.MeetsTarget)
                 {
-                    continue;
+                    postsMeetingTarget++;
                 }
 
-                if (!externalSourceByDomain.TryGetValue(evidence.Domain, out var externalSource))
+                var mutated = false;
+                if (!existingEvidenceUrlsByEvent.TryGetValue(result.EventId, out var existingEvidenceUrls))
                 {
-                    externalSource = new ExternalSource
+                    existingEvidenceUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    existingEvidenceUrlsByEvent[result.EventId] = existingEvidenceUrls;
+                }
+
+                foreach (var evidence in result.ExternalEvidenceCandidates)
+                {
+                    if (!existingEvidenceUrls.Add(evidence.Url))
                     {
-                        Id = Guid.NewGuid(),
-                        Domain = evidence.Domain,
-                        Name = BuildSourceNameFromDomain(evidence.Domain),
-                        FirstSeenAtUtc = DateTimeOffset.UtcNow,
-                        LastSeenAtUtc = DateTimeOffset.UtcNow
-                    };
+                        continue;
+                    }
 
-                    await _externalSourceRepository.AddAsync(externalSource, ct);
-                    externalSourceByDomain[evidence.Domain] = externalSource;
-                }
-                else
-                {
-                    externalSource.LastSeenAtUtc = DateTimeOffset.UtcNow;
-                }
-
-                await _externalEvidenceRepository.AddRangeAsync(
-                    new[]
+                    if (!externalSourceByDomain.TryGetValue(evidence.Domain, out var externalSource))
                     {
-                        new ExternalEvidencePost
+                        externalSource = new ExternalSource
                         {
                             Id = Guid.NewGuid(),
-                            EventId = result.EventId,
-                            ExternalSourceId = externalSource.Id,
-                            Title = evidence.Title,
-                            Url = evidence.Url,
-                            PublishedAtUtc = evidence.PublishedAtUtc,
-                            RelevanceScore = evidence.RelevanceScore,
-                            DiscoveredAtUtc = DateTimeOffset.UtcNow
-                        }
-                    },
-                    ct);
+                            Domain = evidence.Domain,
+                            Name = BuildSourceNameFromDomain(evidence.Domain),
+                            FirstSeenAtUtc = DateTimeOffset.UtcNow,
+                            LastSeenAtUtc = DateTimeOffset.UtcNow
+                        };
 
-                mutated = true;
-            }
+                        await _externalSourceRepository.AddAsync(externalSource, ct);
+                        externalSourceByDomain[evidence.Domain] = externalSource;
+                    }
+                    else
+                    {
+                        externalSource.LastSeenAtUtc = DateTimeOffset.UtcNow;
+                    }
 
-            foreach (var feed in result.RecommendedFeedCandidates)
-            {
-                if (sourceFeedKeys.Contains(feed.FeedKey))
-                {
-                    continue;
-                }
+                    await _externalEvidenceRepository.AddRangeAsync(
+                        new[]
+                        {
+                            new ExternalEvidencePost
+                            {
+                                Id = Guid.NewGuid(),
+                                EventId = result.EventId,
+                                ExternalSourceId = externalSource.Id,
+                                Title = evidence.Title,
+                                Url = evidence.Url,
+                                PublishedAtUtc = evidence.PublishedAtUtc,
+                                RelevanceScore = evidence.RelevanceScore,
+                                DiscoveredAtUtc = DateTimeOffset.UtcNow
+                            }
+                        },
+                        ct);
 
-                if (recommendedByFeedKey.TryGetValue(feed.FeedKey, out var existingRecommended))
-                {
-                    existingRecommended.LastSeenAtUtc = DateTimeOffset.UtcNow;
-                    existingRecommended.SamplePostCount += 1;
-                    existingRecommended.ConfidenceScore = MergeConfidence(existingRecommended.ConfidenceScore, feed.Confidence);
-                    candidatesUpdated++;
                     mutated = true;
-                    continue;
                 }
 
-                var now = DateTimeOffset.UtcNow;
-                var recommendedSource = new RecommendedSource
+                foreach (var feed in result.RecommendedFeedCandidates)
                 {
-                    Id = Guid.NewGuid(),
-                    Name = BuildSourceNameFromDomain(feed.Domain),
-                    Domain = feed.Domain,
-                    FeedUrl = feed.FeedUrl,
-                    Topic = "event-discovery",
-                    DiscoveryMethod = "event-search",
-                    Status = "pending",
-                    ConfidenceScore = feed.Confidence,
-                    SamplePostCount = 1,
-                    DiscoveredAtUtc = now,
-                    LastSeenAtUtc = now
-                };
+                    if (sourceFeedKeys.Contains(feed.FeedKey))
+                    {
+                        continue;
+                    }
 
-                await _recommendedSourceRepository.AddAsync(recommendedSource, ct);
-                recommendedByFeedKey[feed.FeedKey] = recommendedSource;
-                candidatesAdded++;
-                mutated = true;
-            }
+                    if (recommendedByFeedKey.TryGetValue(feed.FeedKey, out var existingRecommended))
+                    {
+                        existingRecommended.LastSeenAtUtc = DateTimeOffset.UtcNow;
+                        existingRecommended.SamplePostCount += 1;
+                        existingRecommended.ConfidenceScore = MergeConfidence(existingRecommended.ConfidenceScore, feed.Confidence);
+                        candidatesUpdated++;
+                        mutated = true;
+                        continue;
+                    }
 
-            if (mutated)
-            {
-                pendingMutations++;
-            }
+                    var now = DateTimeOffset.UtcNow;
+                    var recommendedSource = new RecommendedSource
+                    {
+                        Id = Guid.NewGuid(),
+                        Name = BuildSourceNameFromDomain(feed.Domain),
+                        Domain = feed.Domain,
+                        FeedUrl = feed.FeedUrl,
+                        Topic = "event-discovery",
+                        DiscoveryMethod = "event-search",
+                        Status = "pending",
+                        ConfidenceScore = feed.Confidence,
+                        SamplePostCount = 1,
+                        DiscoveredAtUtc = now,
+                        LastSeenAtUtc = now
+                    };
 
-            if (pendingMutations >= SaveBatchSize)
-            {
-                await SaveProgressAsync(ct);
-                pendingMutations = 0;
+                    await _recommendedSourceRepository.AddAsync(recommendedSource, ct);
+                    recommendedByFeedKey[feed.FeedKey] = recommendedSource;
+                    candidatesAdded++;
+                    mutated = true;
+                }
+
+                if (mutated)
+                {
+                    pendingMutations++;
+                }
+
+                if (pendingMutations >= SaveBatchSize)
+                {
+                    await SaveProgressAsync(ct);
+                    _logger.LogInformation(
+                        "Discovery persistence checkpoint: processed={PostsProcessed}/{TotalPosts}, pendingMutationsFlushed={FlushedMutations}.",
+                        postsProcessed,
+                        totalPosts,
+                        pendingMutations);
+                    pendingMutations = 0;
+                }
             }
+        }
+        finally
+        {
+            CompleteProgressLine();
         }
 
         if (pendingMutations > 0)
         {
             await SaveProgressAsync(ct);
+            _logger.LogInformation(
+                "Discovery persistence final flush: processed={PostsProcessed}/{TotalPosts}, flushedMutations={FlushedMutations}.",
+                postsProcessed,
+                totalPosts,
+                pendingMutations);
         }
 
         var metrics = apiMetrics.Snapshot();

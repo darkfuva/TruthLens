@@ -209,4 +209,22 @@ public sealed class WorkerPipelineRunner
             }
         }
     }
+
+    public async Task RunGraphBackfillCycleAsync(BackfillOptions options, CancellationToken ct)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var backfillService = scope.ServiceProvider.GetRequiredService<GraphBackfillService>();
+
+        var result = await backfillService.BackfillRecentAsync(
+            Math.Max(1, options.LookbackDays),
+            Math.Max(1, options.BatchSize),
+            ct);
+
+        _logger.LogInformation(
+            "Graph backfill cycle: scanned={PostsScanned}, linksAdded={LinksAdded}, candidatesAdded={CandidatesAdded}, eventsTouched={EventsTouched}.",
+            result.PostsScanned,
+            result.LinksAdded,
+            result.CandidatesAdded,
+            result.EventsTouched);
+    }
 }

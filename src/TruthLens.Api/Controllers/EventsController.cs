@@ -23,16 +23,14 @@ public sealed class EventsController : ControllerBase
         [FromQuery] int? limit,
         [FromQuery] string? sort,
         [FromQuery] double? minConfidence,
-        [FromQuery] bool includeProvisional,
+        [FromQuery] bool? includeProvisional,
         CancellationToken ct)
     {
-        // Keep backward compatibility with old `limit` query by treating it as pageSize.
         var resolvedPage = Math.Max(page ?? 1, 1);
         var requestedPageSize = pageSize ?? limit ?? 50;
         var resolvedPageSize = Math.Clamp(requestedPageSize, 1, 200);
-        var normalizedSort = (sort ?? "recent").Trim().ToLowerInvariant();
-
-        if (normalizedSort is not ("recent" or "confidence"))
+        var normalizedSort = NormalizeSort(sort);
+        if (normalizedSort is null)
         {
             return BadRequest("sort must be either 'recent' or 'confidence'.");
         }
@@ -42,7 +40,9 @@ public sealed class EventsController : ControllerBase
             return BadRequest("minConfidence must be between 0 and 1.");
         }
 
-        var totalCount = await _eventRepository.CountForDashboardAsync(minConfidence, includeProvisional, ct);
+        var resolvedIncludeProvisional = includeProvisional ?? true;
+
+        var totalCount = await _eventRepository.CountForDashboardAsync(minConfidence, resolvedIncludeProvisional, ct);
         var totalPages = totalCount == 0 ? 0 : (int)Math.Ceiling(totalCount / (double)resolvedPageSize);
 
         var events = await _eventRepository.GetPageForDashboardAsync(
@@ -50,84 +50,103 @@ public sealed class EventsController : ControllerBase
             resolvedPageSize,
             normalizedSort,
             minConfidence,
-            includeProvisional,
+            resolvedIncludeProvisional,
             ct);
 
-        var items = events.Select(e => new EventListItemResponse(
-            e.Id,
-            e.Title,
-            e.Summary,
-            e.Status,
-            e.ConfidenceScore,
-            e.FirstSeenAtUtc,
-            e.LastSeenAtUtc,
-            e.Posts.Count,
-            e.ExternalEvidencePosts.Count,
-            e.Posts.Count + e.ExternalEvidencePosts.Count,
-            e.Posts
-                .OrderByDescending(p => p.PublishedAtUtc)
-                .Select(p => p.Title)
-                .FirstOrDefault(),
-            e.Posts
-                .OrderByDescending(p => p.PublishedAtUtc)
-                .Select(p => new EventPostItemResponse(
-                    p.Id,
-                    p.Title,
-                    p.Url,
-                    p.PublishedAtUtc,
-                    p.SourceId,
-                    p.Source?.Name))
-                .ToList()
-        )).ToList();
+        var items = events.Select(e =>
+        {
+            var linkedPosts = e.PostLinks
+                .Select(x => x.Post)
+                .Where(x => x is not null)
+                .DistinctBy(x => x.Id)
+                .OrderByDescending(x => x.PublishedAtUtc)
+                .ToList();
 
-        var graph = BuildGraph(events);
+            return new EventListItemResponse(
+                e.Id,
+                e.Title,
+                e.Summary,
+                e.Status,
+                e.ConfidenceScore,
+                e.FirstSeenAtUtc,
+                e.LastSeenAtUtc,
+                linkedPosts.Count,
+                e.ExternalEvidencePosts.Count,
+                linkedPosts.Count + e.ExternalEvidencePosts.Count,
+                linkedPosts.Select(p => p.Title).FirstOrDefault(),
+                linkedPosts
+                    .Select(p => new EventPostItemResponse(
+                        p.Id,
+                        p.Title,
+                        p.Url,
+                        p.PublishedAtUtc,
+                        p.SourceId,
+                        p.Source?.Name))
+                    .ToList());
+        }).ToList();
 
+        var graph = await BuildGraphAsync(events.Select(x => x.Id).ToList(), ct);
         var response = new PagedEventsResponse(
             resolvedPage,
             resolvedPageSize,
             totalCount,
             totalPages,
             items,
-            graph
-        );
+            graph);
 
         return Ok(response);
     }
 
-    private static EventGraphResponse BuildGraph(IReadOnlyList<Event> events)
+    [HttpGet("graph")]
+    public async Task<ActionResult<EventGraphResponse>> GetGraphAsync(
+        [FromQuery] string? sort,
+        [FromQuery] int? maxEvents,
+        [FromQuery] double? minConfidence,
+        [FromQuery] bool? includeProvisional,
+        CancellationToken ct)
     {
+        var normalizedSort = NormalizeSort(sort);
+        if (normalizedSort is null)
+        {
+            return BadRequest("sort must be either 'recent' or 'confidence'.");
+        }
+
+        if (minConfidence is < 0 or > 1)
+        {
+            return BadRequest("minConfidence must be between 0 and 1.");
+        }
+
+        var resolvedIncludeProvisional = includeProvisional ?? true;
+
+        var resolvedMaxEvents = Math.Clamp(maxEvents ?? 150, 1, 500);
+        var events = await _eventRepository.GetPageForDashboardAsync(
+            page: 1,
+            pageSize: resolvedMaxEvents,
+            sort: normalizedSort,
+            minConfidence: minConfidence,
+            includeProvisional: resolvedIncludeProvisional,
+            ct: ct);
+
+        var graph = await BuildGraphAsync(events.Select(x => x.Id).ToList(), ct);
+        return Ok(graph);
+    }
+
+    private async Task<EventGraphResponse> BuildGraphAsync(IReadOnlyCollection<Guid> eventIds, CancellationToken ct)
+    {
+        var events = await _eventRepository.GetByIdsWithGraphAsync(eventIds, ct);
+        var eventIdSet = events.Select(x => x.Id).ToHashSet();
+
         var nodes = new Dictionary<string, EventGraphNodeResponse>(StringComparer.Ordinal);
-        var edges = new List<EventGraphEdgeResponse>();
-        var directedEdgeKeys = new HashSet<string>(StringComparer.Ordinal);
-        var undirectedEdgeKeys = new HashSet<string>(StringComparer.Ordinal);
+        var edges = new Dictionary<string, EventGraphEdgeResponse>(StringComparer.Ordinal);
 
         void AddNode(EventGraphNodeResponse node)
         {
             nodes.TryAdd(node.NodeId, node);
         }
 
-        void AddDirectedEdge(string edgeType, string fromNodeId, string toNodeId)
+        void AddEdge(EventGraphEdgeResponse edge)
         {
-            var key = $"{edgeType}|{fromNodeId}|{toNodeId}";
-            if (!directedEdgeKeys.Add(key))
-            {
-                return;
-            }
-
-            edges.Add(new EventGraphEdgeResponse(key, edgeType, fromNodeId, toNodeId));
-        }
-
-        void AddUndirectedEdge(string edgeType, string leftNodeId, string rightNodeId)
-        {
-            var first = string.CompareOrdinal(leftNodeId, rightNodeId) <= 0 ? leftNodeId : rightNodeId;
-            var second = first == leftNodeId ? rightNodeId : leftNodeId;
-            var key = $"{edgeType}|{first}|{second}";
-            if (!undirectedEdgeKeys.Add(key))
-            {
-                return;
-            }
-
-            edges.Add(new EventGraphEdgeResponse(key, edgeType, first, second));
+            edges.TryAdd(edge.EdgeId, edge);
         }
 
         foreach (var evt in events)
@@ -141,8 +160,24 @@ public sealed class EventsController : ControllerBase
                 null,
                 null));
 
-            foreach (var post in evt.Posts.OrderByDescending(p => p.PublishedAtUtc))
+            var links = evt.PostLinks.OrderByDescending(x => x.IsPrimary).ThenByDescending(x => x.RelevanceScore).ToList();
+            if (links.Count == 0)
             {
+                links.AddRange(evt.Posts.Select(p => new PostEventLink
+                {
+                    Id = Guid.Empty,
+                    EventId = evt.Id,
+                    PostId = p.Id,
+                    Post = p,
+                    IsPrimary = true,
+                    RelationType = "PRIMARY_LEGACY",
+                    RelevanceScore = p.ClusterAssignmentScore ?? 0.55
+                }));
+            }
+
+            foreach (var link in links)
+            {
+                var post = link.Post;
                 var postNodeId = $"post:{post.Id}";
                 AddNode(new EventGraphNodeResponse(
                     postNodeId,
@@ -151,53 +186,54 @@ public sealed class EventsController : ControllerBase
                     evt.Id,
                     post.Id,
                     null));
-                AddDirectedEdge("contains", eventNodeId, postNodeId);
 
-                var sourceName = post.Source?.Name;
-                if (!string.IsNullOrWhiteSpace(sourceName))
+                AddEdge(new EventGraphEdgeResponse(
+                    EdgeId: $"POST_EVENT:{post.Id}:{evt.Id}",
+                    EdgeType: "POST_EVENT",
+                    FromNodeId: postNodeId,
+                    ToNodeId: eventNodeId,
+                    RelationType: link.RelationType,
+                    Strength: link.RelevanceScore));
+
+                if (!string.IsNullOrWhiteSpace(post.Source?.Name))
                 {
                     var sourceNodeId = $"source:{post.SourceId}";
                     AddNode(new EventGraphNodeResponse(
                         sourceNodeId,
                         "source",
-                        TruncateLabel(sourceName, 52),
+                        TruncateLabel(post.Source.Name, 56),
                         null,
                         null,
                         post.SourceId));
-                    AddDirectedEdge("published_by", postNodeId, sourceNodeId);
+                    AddEdge(new EventGraphEdgeResponse(
+                        EdgeId: $"POST_SOURCE:{post.Id}:{post.SourceId}",
+                        EdgeType: "POST_SOURCE",
+                        FromNodeId: postNodeId,
+                        ToNodeId: sourceNodeId,
+                        RelationType: null,
+                        Strength: null));
                 }
+            }
+
+            foreach (var relation in evt.OutgoingRelations.Where(x => eventIdSet.Contains(x.ToEventId)))
+            {
+                AddEdge(new EventGraphEdgeResponse(
+                    EdgeId: $"EVENT_EVENT:{relation.FromEventId}:{relation.ToEventId}:{relation.RelationType}",
+                    EdgeType: "EVENT_EVENT",
+                    FromNodeId: $"event:{relation.FromEventId}",
+                    ToNodeId: $"event:{relation.ToEventId}",
+                    RelationType: relation.RelationType,
+                    Strength: relation.Strength));
             }
         }
 
-        const double relatedThreshold = 0.9;
-        for (var i = 0; i < events.Count; i++)
-        {
-            var leftEmbedding = events[i].CentroidEmbedding;
-            if (leftEmbedding is null)
-            {
-                continue;
-            }
+        return new EventGraphResponse(nodes.Values.ToList(), edges.Values.ToList());
+    }
 
-            for (var j = i + 1; j < events.Count; j++)
-            {
-                var rightEmbedding = events[j].CentroidEmbedding;
-                if (rightEmbedding is null)
-                {
-                    continue;
-                }
-
-                var similarity = CosineSimilarity(leftEmbedding.ToArray(), rightEmbedding.ToArray());
-                if (similarity >= relatedThreshold)
-                {
-                    AddUndirectedEdge(
-                        "related_event",
-                        $"event:{events[i].Id}",
-                        $"event:{events[j].Id}");
-                }
-            }
-        }
-
-        return new EventGraphResponse(nodes.Values.ToList(), edges);
+    private static string? NormalizeSort(string? sort)
+    {
+        var normalized = (sort ?? "recent").Trim().ToLowerInvariant();
+        return normalized is "recent" or "confidence" ? normalized : null;
     }
 
     private static string TruncateLabel(string value, int maxLength)
@@ -208,31 +244,5 @@ public sealed class EventsController : ControllerBase
         }
 
         return value.Length <= maxLength ? value : $"{value[..(maxLength - 1)]}...";
-    }
-
-    private static double CosineSimilarity(float[] left, float[] right)
-    {
-        if (left.Length != right.Length || left.Length == 0)
-        {
-            return -1;
-        }
-
-        double dot = 0;
-        double leftNorm = 0;
-        double rightNorm = 0;
-
-        for (var i = 0; i < left.Length; i++)
-        {
-            dot += left[i] * right[i];
-            leftNorm += left[i] * left[i];
-            rightNorm += right[i] * right[i];
-        }
-
-        if (leftNorm <= 0 || rightNorm <= 0)
-        {
-            return -1;
-        }
-
-        return dot / (Math.Sqrt(leftNorm) * Math.Sqrt(rightNorm));
     }
 }

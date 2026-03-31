@@ -17,7 +17,9 @@ using TruthLens.Application.Repositories.Event;
 using TruthLens.Application.Services.Clustering;
 using TruthLens.Application.Services.Discovery;
 using TruthLens.Application.Services.Summarization;
+using TruthLens.Application.Services.Extraction;
 using TruthLens.Infrastructure.Discovery;
+using TruthLens.Infrastructure.Extraction;
 using TruthLens.Infrastructure.Summarization;
 using TruthLens.Application.Services.Scoring;
 
@@ -40,8 +42,13 @@ public static class DependencyInjection
         services.AddScoped<RssIngestionService>();
         services.AddScoped<EmbeddingGenerationService>();
         services.AddScoped<IEventRepository, EventRepository>();
+        services.AddScoped<IPostEventLinkRepository, PostEventLinkRepository>();
+        services.AddScoped<IEventRelationRepository, EventRelationRepository>();
+        services.AddScoped<IExtractedEventCandidateRepository, ExtractedEventCandidateRepository>();
         services.AddScoped<ICosineSimilarityService, CosineSimilarityService>();
         services.AddScoped<ClusteringService>();
+        services.AddScoped<EventRelationRecomputeService>();
+        services.AddScoped<GraphBackfillService>();
         services.AddScoped<SourceDiscoveryService>();
         services.AddScoped<RecommendedSourcePromotionService>();
         services.AddScoped<SourceConfidenceScoringService>();
@@ -83,6 +90,13 @@ public static class DependencyInjection
         services.AddScoped<EventSummarizationService>();
 
         services.AddHttpClient<IEventSummarizer, OllamaEventSummarizer>((sp, client) =>
+        {
+            var options = sp.GetRequiredService<IOptions<OllamaOptions>>().Value;
+            client.BaseAddress = new Uri(options.BaseUrl);
+            client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+        });
+
+        services.AddHttpClient<IEventCandidateExtractor, OllamaEventCandidateExtractor>((sp, client) =>
         {
             var options = sp.GetRequiredService<IOptions<OllamaOptions>>().Value;
             client.BaseAddress = new Uri(options.BaseUrl);
