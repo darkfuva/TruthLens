@@ -1,9 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
-import ReactFlow, { Background, Controls, MiniMap } from "reactflow";
-import "reactflow/dist/style.css";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
+import cytoscape from "cytoscape";
 
 const EMPTY_GRAPH = { nodes: [], edges: [] };
-const EDGE_TYPE_OPTIONS = ["POST_EVENT", "EVENT_EVENT", "POST_SOURCE"];
 
 function formatDate(value) {
   return new Date(value).toLocaleString();
@@ -22,141 +20,54 @@ function truncate(value, maxLength) {
   return `${value.slice(0, maxLength - 1)}...`;
 }
 
-function getNodeColor(nodeType) {
-  if (nodeType === "event") return "#f59e0b";
-  if (nodeType === "post") return "#2563eb";
-  if (nodeType === "source") return "#16a34a";
-  return "#64748b";
-}
-
-function getEdgeColor(edgeType, relationType) {
-  if (edgeType === "POST_EVENT") return relationType === "PRIMARY" ? "#1d4ed8" : "#60a5fa";
-  if (edgeType === "POST_SOURCE") return "#16a34a";
-  if (edgeType === "EVENT_EVENT") {
-    if (relationType === "FOLLOWUP") return "#a855f7";
-    if (relationType === "SUBEVENT_OF") return "#ec4899";
-    return "#f59e0b";
-  }
-
-  return "#94a3b8";
-}
-
-function buildFlowGraph(graph, selectedPostId, edgeTypeFilter, minRelationStrength) {
+function buildLiteGraphModel(graph, selectedPostId, minRelationStrength) {
   const sourceNodes = Array.isArray(graph?.nodes) ? graph.nodes : [];
   const sourceEdges = Array.isArray(graph?.edges) ? graph.edges : [];
 
-  const filteredEdges = sourceEdges.filter((edge) => {
-    if (!edgeTypeFilter.has(edge.edgeType)) return false;
-    if (edge.edgeType === "EVENT_EVENT") {
-      const strength = typeof edge.strength === "number" ? edge.strength : 0;
-      if (strength < minRelationStrength) return false;
-    }
+  const eventNodes = sourceNodes.filter((node) => node.nodeType === "event");
+  const eventNodeIds = new Set(eventNodes.map((node) => node.nodeId));
 
-    return true;
+  const eventEdges = sourceEdges.filter((edge) => {
+    if (edge.edgeType !== "EVENT_EVENT") return false;
+    if (!eventNodeIds.has(edge.fromNodeId) || !eventNodeIds.has(edge.toNodeId)) return false;
+
+    const strength = typeof edge.strength === "number" ? edge.strength : 0;
+    return strength >= minRelationStrength;
   });
 
-  const nodeMap = new Map(sourceNodes.map((node) => [node.nodeId, node]));
-  const connectedNodeIds = new Set();
+  const selectedPostNodeId = selectedPostId ? `post:${selectedPostId}` : null;
+  const highlightedEventIds = new Set();
 
-  for (const edge of filteredEdges) {
-    connectedNodeIds.add(edge.fromNodeId);
-    connectedNodeIds.add(edge.toNodeId);
-  }
+  if (selectedPostNodeId) {
+    for (const edge of sourceEdges) {
+      if (edge.edgeType !== "POST_EVENT") continue;
 
-  const selectedNodeId = selectedPostId ? `post:${selectedPostId}` : null;
-  const highlightNodes = new Set();
-  const highlightEdges = new Set();
+      if (edge.fromNodeId === selectedPostNodeId && eventNodeIds.has(edge.toNodeId)) {
+        highlightedEventIds.add(edge.toNodeId);
+      }
 
-  if (selectedNodeId) {
-    highlightNodes.add(selectedNodeId);
-    for (const edge of filteredEdges) {
-      if (edge.fromNodeId === selectedNodeId || edge.toNodeId === selectedNodeId) {
-        highlightEdges.add(edge.edgeId);
-        highlightNodes.add(edge.fromNodeId);
-        highlightNodes.add(edge.toNodeId);
+      if (edge.toNodeId === selectedPostNodeId && eventNodeIds.has(edge.fromNodeId)) {
+        highlightedEventIds.add(edge.fromNodeId);
       }
     }
   }
 
-  const buckets = {
-    event: [],
-    post: [],
-    source: [],
-    other: [],
+  const highlightedEdgeIds = new Set();
+  if (highlightedEventIds.size > 0) {
+    for (const edge of eventEdges) {
+      if (highlightedEventIds.has(edge.fromNodeId) || highlightedEventIds.has(edge.toNodeId)) {
+        highlightedEdgeIds.add(edge.edgeId);
+      }
+    }
+  }
+
+  return {
+    nodes: eventNodes,
+    edges: eventEdges,
+    highlightedEventIds,
+    highlightedEdgeIds,
+    hasSelection: Boolean(selectedPostNodeId),
   };
-
-  for (const node of sourceNodes) {
-    if (!connectedNodeIds.has(node.nodeId)) continue;
-
-    if (node.nodeType === "event") buckets.event.push(node);
-    else if (node.nodeType === "post") buckets.post.push(node);
-    else if (node.nodeType === "source") buckets.source.push(node);
-    else buckets.other.push(node);
-  }
-
-  for (const key of Object.keys(buckets)) {
-    buckets[key].sort((a, b) => a.label.localeCompare(b.label));
-  }
-
-  const columnX = { event: 120, post: 440, source: 760, other: 760 };
-  const verticalGap = 70;
-  const startY = 60;
-  const positions = new Map();
-
-  for (const [type, items] of Object.entries(buckets)) {
-    items.forEach((node, index) => {
-      positions.set(node.nodeId, { x: columnX[type], y: startY + index * verticalGap });
-    });
-  }
-
-  const nodes = [...buckets.event, ...buckets.post, ...buckets.source, ...buckets.other].map((node) => {
-    const position = positions.get(node.nodeId) ?? { x: 50, y: 50 };
-    const isHighlighted = !selectedNodeId || highlightNodes.has(node.nodeId);
-
-    return {
-      id: node.nodeId,
-      data: { label: truncate(node.label, 44), nodeType: node.nodeType, postId: node.postId },
-      position,
-      draggable: false,
-      selectable: true,
-      style: {
-        borderRadius: node.nodeType === "event" ? "14px" : "10px",
-        border: `2px solid ${getNodeColor(node.nodeType)}`,
-        background: node.nodeType === "event" ? "#fffbeb" : "#f8fafc",
-        color: "#0f172a",
-        fontSize: 12,
-        width: node.nodeType === "event" ? 240 : 220,
-        opacity: isHighlighted ? 1 : 0.25,
-      },
-    };
-  });
-
-  const edges = filteredEdges
-    .filter((edge) => nodeMap.has(edge.fromNodeId) && nodeMap.has(edge.toNodeId))
-    .map((edge) => {
-      const isHighlighted = !selectedNodeId || highlightEdges.has(edge.edgeId);
-      const label =
-        edge.edgeType === "EVENT_EVENT"
-          ? `${edge.relationType ?? "RELATED"} ${typeof edge.strength === "number" ? `(${edge.strength.toFixed(2)})` : ""}`.trim()
-          : edge.edgeType;
-
-      return {
-        id: edge.edgeId,
-        source: edge.fromNodeId,
-        target: edge.toNodeId,
-        type: "smoothstep",
-        animated: edge.edgeType === "EVENT_EVENT" && isHighlighted,
-        label,
-        style: {
-          stroke: getEdgeColor(edge.edgeType, edge.relationType),
-          strokeWidth: edge.edgeType === "EVENT_EVENT" ? 2.2 : 1.8,
-          opacity: isHighlighted ? 0.95 : 0.18,
-        },
-        labelStyle: { fontSize: 10, fill: "#334155" },
-      };
-    });
-
-  return { nodes, edges };
 }
 
 export default function App() {
@@ -173,8 +84,10 @@ export default function App() {
   const [totalPages, setTotalPages] = useState(0);
   const [minConfidence, setMinConfidence] = useState("");
   const [selectedPostId, setSelectedPostId] = useState(null);
-  const [edgeTypeFilter, setEdgeTypeFilter] = useState(new Set(EDGE_TYPE_OPTIONS));
   const [minRelationStrength, setMinRelationStrength] = useState(0.7);
+
+  const graphContainerRef = useRef(null);
+  const cyRef = useRef(null);
 
   useEffect(() => {
     let mounted = true;
@@ -223,7 +136,7 @@ export default function App() {
       try {
         const params = new URLSearchParams();
         params.set("sort", sort);
-        params.set("maxEvents", "220");
+        params.set("maxEvents", "180");
         params.set("includeProvisional", "true");
         if (minConfidence !== "") params.set("minConfidence", minConfidence);
 
@@ -259,10 +172,147 @@ export default function App() {
     return { withSummary, totalPosts };
   }, [events]);
 
-  const flowGraph = useMemo(
-    () => buildFlowGraph(graph, selectedPostId, edgeTypeFilter, minRelationStrength),
-    [graph, selectedPostId, edgeTypeFilter, minRelationStrength],
+  const liteGraph = useMemo(
+    () => buildLiteGraphModel(graph, selectedPostId, minRelationStrength),
+    [graph, selectedPostId, minRelationStrength],
   );
+
+  const cyElements = useMemo(() => {
+    const nodes = liteGraph.nodes.map((node) => {
+      const isHighlighted = liteGraph.highlightedEventIds.has(node.nodeId);
+      const shouldFade = liteGraph.hasSelection && liteGraph.highlightedEventIds.size > 0 && !isHighlighted;
+
+      return {
+        data: {
+          id: node.nodeId,
+          label: truncate(node.label, 46),
+          fullLabel: node.label,
+        },
+        classes: shouldFade ? "event-node faded" : isHighlighted ? "event-node highlighted" : "event-node",
+      };
+    });
+
+    const edges = liteGraph.edges.map((edge) => {
+      const isHighlighted = liteGraph.highlightedEdgeIds.has(edge.edgeId);
+      const shouldFade = liteGraph.hasSelection && liteGraph.highlightedEventIds.size > 0 && !isHighlighted;
+
+      return {
+        data: {
+          id: edge.edgeId,
+          source: edge.fromNodeId,
+          target: edge.toNodeId,
+          relationType: edge.relationType ?? "RELATED",
+          strength: typeof edge.strength === "number" ? edge.strength : 0,
+        },
+        classes: shouldFade ? "event-edge faded" : isHighlighted ? "event-edge highlighted" : "event-edge",
+      };
+    });
+
+    return [...nodes, ...edges];
+  }, [liteGraph]);
+
+  useEffect(() => {
+    if (!graphContainerRef.current || cyRef.current) {
+      return undefined;
+    }
+
+    const cy = cytoscape({
+      container: graphContainerRef.current,
+      wheelSensitivity: 0.18,
+      autoungrabify: true,
+      style: [
+        {
+          selector: "node",
+          style: {
+            "background-color": "#5b5f66",
+            label: "data(label)",
+            color: "#f8fafc",
+            "font-size": "12px",
+            "text-wrap": "wrap",
+            "text-max-width": "120px",
+            "text-valign": "bottom",
+            "text-halign": "center",
+            "text-margin-y": "8px",
+            width: 22,
+            height: 22,
+            opacity: 0.95,
+          },
+        },
+        {
+          selector: "node.highlighted",
+          style: {
+            "background-color": "#9f7aea",
+            width: 28,
+            height: 28,
+            opacity: 1,
+          },
+        },
+        {
+          selector: "node.faded",
+          style: {
+            opacity: 0.24,
+          },
+        },
+        {
+          selector: "edge",
+          style: {
+            width: 1.2,
+            "line-color": "#4b5563",
+            "target-arrow-color": "#4b5563",
+            "curve-style": "bezier",
+            opacity: 0.6,
+          },
+        },
+        {
+          selector: "edge.highlighted",
+          style: {
+            width: 2,
+            "line-color": "#a78bfa",
+            "target-arrow-color": "#a78bfa",
+            opacity: 0.95,
+          },
+        },
+        {
+          selector: "edge.faded",
+          style: {
+            opacity: 0.15,
+          },
+        },
+      ],
+    });
+
+    cyRef.current = cy;
+
+    return () => {
+      cy.destroy();
+      cyRef.current = null;
+    };
+  }, [graphLoading, graphError, liteGraph.nodes.length]);
+
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy) {
+      return;
+    }
+
+    cy.elements().remove();
+    if (cyElements.length === 0) {
+      return;
+    }
+
+    cy.add(cyElements);
+    cy.layout({
+      name: "cose",
+      animate: false,
+      fit: true,
+      padding: 28,
+      randomize: true,
+      nodeRepulsion: 140000,
+      idealEdgeLength: 105,
+      edgeElasticity: 0.16,
+      gravity: 0.28,
+    }).run();
+  }, [cyElements]);
 
   return (
     <main className="page">
@@ -402,8 +452,8 @@ export default function App() {
 
           <aside className="graph-panel">
             <div className="graph-head">
-              <h2>Event Graph (React Flow)</h2>
-              <p>Click post chips to highlight related nodes and edges.</p>
+              <h2>Event Mind Map (Lite)</h2>
+              <p>Floating event title nodes. Click a post chip to highlight related events.</p>
               {selectedPostId && (
                 <button type="button" onClick={() => setSelectedPostId(null)}>
                   Clear Selection
@@ -412,21 +462,6 @@ export default function App() {
             </div>
 
             <div className="graph-filters">
-              {EDGE_TYPE_OPTIONS.map((edgeType) => (
-                <label key={edgeType}>
-                  <input
-                    type="checkbox"
-                    checked={edgeTypeFilter.has(edgeType)}
-                    onChange={(e) => {
-                      const next = new Set(edgeTypeFilter);
-                      if (e.target.checked) next.add(edgeType);
-                      else next.delete(edgeType);
-                      setEdgeTypeFilter(next);
-                    }}
-                  />
-                  {edgeType}
-                </label>
-              ))}
               <label>
                 Min Event Relation Strength
                 <input
@@ -440,35 +475,20 @@ export default function App() {
               </label>
             </div>
 
-            <div className="reactflow-wrapper">
+            <div className="cytoscape-wrapper">
               {graphLoading && <p className="graph-empty">Loading graph...</p>}
               {!graphLoading && graphError && <p className="status error">{graphError}</p>}
-              {!graphLoading && !graphError && flowGraph.nodes.length === 0 && (
+              {!graphLoading && !graphError && liteGraph.nodes.length === 0 && (
                 <p className="graph-empty">No graph data for current filters.</p>
               )}
-              {!graphLoading && !graphError && flowGraph.nodes.length > 0 && (
-                <ReactFlow
-                  nodes={flowGraph.nodes}
-                  edges={flowGraph.edges}
-                  fitView
-                  attributionPosition="bottom-left"
-                  onNodeClick={(_, node) => {
-                    if (node?.data?.postId) {
-                      setSelectedPostId(node.data.postId);
-                    }
-                  }}
-                >
-                  <MiniMap nodeStrokeWidth={3} />
-                  <Controls />
-                  <Background gap={18} size={1} />
-                </ReactFlow>
+              {!graphLoading && !graphError && liteGraph.nodes.length > 0 && (
+                <div ref={graphContainerRef} className="cytoscape-canvas" />
               )}
             </div>
 
             <div className="graph-legend">
-              <span className="dot event" /> Event
-              <span className="dot post" /> Post
-              <span className="dot source" /> Source
+              <span className="dot event" /> Event node
+              <span className="dot highlight" /> Related to selected post
             </div>
           </aside>
         </section>
