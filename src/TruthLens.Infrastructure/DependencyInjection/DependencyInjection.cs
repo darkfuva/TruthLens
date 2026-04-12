@@ -47,6 +47,7 @@ public static class DependencyInjection
         services.AddScoped<IExtractedEventCandidateRepository, ExtractedEventCandidateRepository>();
         services.AddScoped<ICosineSimilarityService, CosineSimilarityService>();
         services.AddScoped<ClusteringService>();
+        services.AddScoped<ExtractedEventCandidatePromotionService>();
         services.AddScoped<EventRelationRecomputeService>();
         services.AddScoped<GraphBackfillService>();
         services.AddScoped<SourceDiscoveryService>();

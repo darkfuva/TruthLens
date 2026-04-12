@@ -315,4 +315,28 @@ public sealed class WorkerPipelineRunner
             result.CandidatesAdded,
             result.EventsTouched);
     }
+
+    public async Task RunCandidatePromotionCycleAsync(CandidatePromotionOptions options, CancellationToken ct)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var promotionService = scope.ServiceProvider.GetRequiredService<ExtractedEventCandidatePromotionService>();
+
+        var result = await promotionService.PromotePendingAsync(
+            batchSize: Math.Max(1, options.BatchSize),
+            matchingThreshold: options.MatchingThreshold,
+            maxLinksPerCandidate: Math.Max(1, options.MaxLinksPerCandidate),
+            lookbackDays: Math.Max(1, options.LookbackDays),
+            maxEventCandidates: Math.Max(25, options.MaxEventCandidates),
+            minCreateConfidence: options.MinCreateConfidence,
+            ct);
+
+        _logger.LogInformation(
+            "Candidate promotion cycle: scanned={CandidatesScanned}, linked={CandidatesLinked}, eventsCreated={EventsCreated}, linksAdded={LinksAdded}, noMatch={NoMatch}, skipped={Skipped}.",
+            result.CandidatesScanned,
+            result.CandidatesLinked,
+            result.EventsCreated,
+            result.LinksAdded,
+            result.NoMatch,
+            result.Skipped);
+    }
 }

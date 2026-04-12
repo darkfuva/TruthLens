@@ -47,6 +47,13 @@ services:
       Ollama__ExtractionModel: gemma4:e2b-it-q4_K_M
       Ollama__SummarizationModel: gemma4:e2b-it-q4_K_M
       Ollama__TimeoutSeconds: 120
+      WorkerJobs__CandidatePromotion__Enabled: "true"
+      WorkerJobs__CandidatePromotion__RunOnStart: "true"
+      WorkerJobs__CandidatePromotion__IntervalSeconds: "180"
+      WorkerJobs__CandidatePromotion__BatchSize: "200"
+      WorkerJobs__CandidatePromotion__MatchingThreshold: "0.82"
+      WorkerJobs__CandidatePromotion__MaxLinksPerCandidate: "3"
+      WorkerJobs__CandidatePromotion__MinCreateConfidence: "0.65"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:

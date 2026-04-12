@@ -9,6 +9,7 @@ public sealed class WorkerJobsOptions
     public ScoringOptions Scoring { get; set; } = new();
     public SummarizationOptions Summarization { get; set; } = new();
     public BackfillOptions Backfill { get; set; } = new();
+    public CandidatePromotionOptions CandidatePromotion { get; set; } = new();
 }
 
 public class JobOptionsBase
@@ -55,4 +56,14 @@ public sealed class BackfillOptions : JobOptionsBase
 {
     public int LookbackDays { get; set; } = 30;
     public int BatchSize { get; set; } = 300;
+}
+
+public sealed class CandidatePromotionOptions : JobOptionsBase
+{
+    public int BatchSize { get; set; } = 200;
+    public int LookbackDays { get; set; } = 21;
+    public int MaxEventCandidates { get; set; } = 600;
+    public int MaxLinksPerCandidate { get; set; } = 3;
+    public double MatchingThreshold { get; set; } = 0.82;
+    public double MinCreateConfidence { get; set; } = 0.65;
 }

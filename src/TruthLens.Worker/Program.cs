@@ -13,6 +13,7 @@ builder.Services
     .Validate(options => options.Scoring.IntervalSeconds > 0, "WorkerJobs:Scoring:IntervalSeconds must be > 0.")
     .Validate(options => options.Summarization.IntervalSeconds > 0, "WorkerJobs:Summarization:IntervalSeconds must be > 0.")
     .Validate(options => options.Backfill.IntervalSeconds > 0, "WorkerJobs:Backfill:IntervalSeconds must be > 0.")
+    .Validate(options => options.CandidatePromotion.IntervalSeconds > 0, "WorkerJobs:CandidatePromotion:IntervalSeconds must be > 0.")
     .ValidateOnStart();
 
 builder.Services.AddSingleton<WorkerPipelineRunner>();
@@ -23,6 +24,7 @@ builder.Services.AddHostedService<DiscoveryPromotionWorker>();
 builder.Services.AddHostedService<ScoringWorker>();
 builder.Services.AddHostedService<SummarizationWorker>();
 builder.Services.AddHostedService<GraphBackfillWorker>();
+builder.Services.AddHostedService<CandidatePromotionWorker>();
 
 var host = builder.Build();
 host.Run();
