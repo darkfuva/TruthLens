@@ -161,19 +161,6 @@ public sealed class EventsController : ControllerBase
                 null));
 
             var links = evt.PostLinks.OrderByDescending(x => x.IsPrimary).ThenByDescending(x => x.RelevanceScore).ToList();
-            if (links.Count == 0)
-            {
-                links.AddRange(evt.Posts.Select(p => new PostEventLink
-                {
-                    Id = Guid.Empty,
-                    EventId = evt.Id,
-                    PostId = p.Id,
-                    Post = p,
-                    IsPrimary = true,
-                    RelationType = "PRIMARY_LEGACY",
-                    RelevanceScore = p.ClusterAssignmentScore ?? 0.55
-                }));
-            }
 
             foreach (var link in links)
             {

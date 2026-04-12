@@ -96,11 +96,7 @@ public sealed class SourceDiscoveryService
                     .DistinctBy(p => p.Id)
                     .ToList();
 
-                var candidatePosts = linkedPosts.Count > 0
-                    ? linkedPosts
-                    : evt.Posts.ToList();
-
-                return candidatePosts
+                return linkedPosts
                     .Where(p => !string.IsNullOrWhiteSpace(p.Title) || !string.IsNullOrWhiteSpace(p.Url))
                     .OrderByDescending(p => p.PublishedAtUtc)
                     .Select(post => new DiscoveryWorkItem(evt, post, eventIndex + 1, events.Count));
@@ -344,7 +340,7 @@ public sealed class SourceDiscoveryService
             var feedCandidates = new List<RecommendedFeedCandidate>();
 
             var discoveryData = await DiscoverDomainsAndHitsForPostAsync(workItem.Event, workItem.Post, apiMetrics, ct);
-            var discoveryConfidence = ComputeDiscoveryConfidence(workItem.Post);
+            var discoveryConfidence = ComputeDiscoveryConfidence(workItem.Event, workItem.Post);
 
             foreach (var hit in discoveryData.Hits)
             {
@@ -658,9 +654,14 @@ public sealed class SourceDiscoveryService
         return $"{host}{port}{path}{query}";
     }
 
-    private static double ComputeDiscoveryConfidence(Post post)
+    private static double ComputeDiscoveryConfidence(Event evt, Post post)
     {
-        var assignmentSignal = Clamp01(post.ClusterAssignmentScore ?? 0.55);
+        var assignmentSignal = Clamp01(
+            evt.PostLinks
+                .Where(x => x.PostId == post.Id)
+                .Select(x => (double?)x.RelevanceScore)
+                .DefaultIfEmpty(0.55)
+                .Max() ?? 0.55);
         var ageHours = Math.Max(0, (DateTimeOffset.UtcNow - post.PublishedAtUtc).TotalHours);
         var recencySignal = Math.Exp(-ageHours / 48d); // ~2 days characteristic decay
 

@@ -17,24 +17,15 @@ public sealed class EventConfidenceScoringService
         foreach (var evt in events)
         {
             var links = evt.PostLinks;
-            var linkedEvidence = links.Count > 0
-                ? links
-                    .Where(l => l.Post is not null)
-                    .Select(l => new
-                    {
-                        Post = l.Post,
-                        Score = Math.Max(0.05, l.RelevanceScore),
-                        Primary = l.IsPrimary
-                    })
-                    .ToList()
-                : evt.Posts
-                    .Select(p => new
-                    {
-                        Post = p,
-                        Score = Math.Max(0.05, p.ClusterAssignmentScore ?? 0.55),
-                        Primary = true
-                    })
-                    .ToList();
+            var linkedEvidence = links
+                .Where(l => l.Post is not null)
+                .Select(l => new
+                {
+                    Post = l.Post,
+                    Score = Math.Max(0.05, l.RelevanceScore),
+                    Primary = l.IsPrimary
+                })
+                .ToList();
 
             var posts = linkedEvidence.Select(x => x.Post).ToList();
             var externalEvidence = evt.ExternalEvidencePosts;

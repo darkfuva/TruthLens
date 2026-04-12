@@ -20,6 +20,10 @@ public sealed class PostEventLinkConfiguration : IEntityTypeConfiguration<PostEv
         entity.Property(x => x.LinkedAtUtc).IsRequired();
 
         entity.HasIndex(x => new { x.PostId, x.EventId }).IsUnique();
+        entity.HasIndex(x => x.PostId)
+            .IsUnique()
+            .HasFilter("\"IsPrimary\" = TRUE")
+            .HasDatabaseName("UX_post_event_links_one_primary_per_post");
         entity.HasIndex(x => x.EventId);
         entity.HasIndex(x => new { x.EventId, x.IsPrimary });
         entity.HasIndex(x => x.LinkedAtUtc);

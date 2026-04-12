@@ -24,22 +24,6 @@ public sealed class EventSummarizationService
         foreach (var evt in events)
         {
             var posts = await _eventRepository.GetRecentLinkedPostsForEventAsync(evt.Id, 10, ct);
-            if (posts.Count == 0)
-            {
-                var legacyPosts = await _eventRepository.GetRecentPostsForEventAsync(evt.Id, 10, ct);
-                posts = legacyPosts
-                    .Select(p => (p, new TruthLens.Domain.Entities.PostEventLink
-                    {
-                        Id = Guid.Empty,
-                        EventId = evt.Id,
-                        PostId = p.Id,
-                        IsPrimary = true,
-                        RelevanceScore = p.ClusterAssignmentScore ?? 0.55,
-                        RelationType = "PRIMARY_LEGACY"
-                    }))
-                    .ToList();
-            }
-
             var externalEvidence = await _eventRepository.GetRecentExternalEvidenceForEventAsync(evt.Id, 8, ct);
             if (posts.Count == 0 && externalEvidence.Count == 0) continue;
 

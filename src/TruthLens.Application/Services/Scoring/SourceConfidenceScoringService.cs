@@ -38,7 +38,7 @@ public sealed class SourceConfidenceScoringService
                 ? 0
                 : stats.CorroboratedRecentPostCount / (double)stats.RecentPostCount;
             var corroborationScore = Clamp01(corroborationRate);
-            var assignmentScore = Clamp01(stats.AverageClusterAssignmentScore ?? 0.5);
+            var assignmentScore = Clamp01(stats.AveragePrimaryLinkRelevanceScore ?? 0.5);
             var recencyScore = stats.LatestPublishedAtUtc.HasValue
                 ? Clamp01(1 - ((now - stats.LatestPublishedAtUtc.Value).TotalHours / (24 * 14.0)))
                 : 0;

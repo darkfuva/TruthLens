@@ -16,9 +16,6 @@ public sealed class Post
     public Vector? Embedding { get; set; }
     public string? EmbeddingModel { get; set; }
     public DateTimeOffset? EmbeddedAtUtc { get; set; }
-    public Guid? EventId { get; set; }
-    public Event? Event { get; set; }
-    public double? ClusterAssignmentScore { get; set; }
     public ICollection<PostEventLink> EventLinks { get; set; } = new List<PostEventLink>();
     public ICollection<ExtractedEventCandidate> ExtractedEventCandidates { get; set; } = new List<ExtractedEventCandidate>();
 }

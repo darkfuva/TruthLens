@@ -42,6 +42,9 @@ public sealed class WorkerPipelineRunner
         for (var iteration = 1; iteration <= maxIterations; iteration++)
         {
             ct.ThrowIfCancellationRequested();
+            var pendingLinkingBefore = await db.Posts.CountAsync(
+                p => p.Embedding != null && !p.EventLinks.Any(l => l.IsPrimary),
+                ct);
             var embeddedCount = 0;
             try
             {
@@ -72,14 +75,37 @@ public sealed class WorkerPipelineRunner
             var pendingLinking = await db.Posts.CountAsync(
                 p => p.Embedding != null && !p.EventLinks.Any(l => l.IsPrimary),
                 ct);
+            var postsWithDuplicatePrimary = await db.PostEventLinks
+                .Where(x => x.IsPrimary)
+                .GroupBy(x => x.PostId)
+                .CountAsync(g => g.Count() > 1, ct);
+
+            var linkedThisIteration = Math.Max(0, pendingLinkingBefore - pendingLinking);
+            var linkerFailures = Math.Max(0, clusteredCount - linkedThisIteration);
+            var linkerSuccessRate = clusteredCount <= 0
+                ? "n/a"
+                : $"{(linkedThisIteration / (double)clusteredCount) * 100d:F1}%";
 
             _logger.LogInformation(
-                "Ingestion cycle iteration {Iteration}: embedded={EmbeddedCount}, clustered={ClusteredCount}, pendingEmbedding={PendingEmbedding}, pendingLinking={PendingLinking}.",
+                "Ingestion cycle iteration {Iteration}: embedded={EmbeddedCount}, clustered={ClusteredCount}, pendingEmbedding={PendingEmbedding}, pendingLinking={PendingLinking}, duplicatePrimaryPosts={DuplicatePrimaryPosts}, linkerLinked={LinkerLinked}, linkerFailed={LinkerFailed}, linkerSuccessRate={LinkerSuccessRate}.",
                 iteration,
                 embeddedCount,
                 clusteredCount,
                 pendingEmbedding,
-                pendingLinking);
+                pendingLinking,
+                postsWithDuplicatePrimary,
+                linkedThisIteration,
+                linkerFailures,
+                linkerSuccessRate);
+
+            if (pendingLinking > pendingLinkingBefore)
+            {
+                _logger.LogWarning(
+                    "Link backlog grew during ingestion iteration {Iteration}: before={Before}, after={After}.",
+                    iteration,
+                    pendingLinkingBefore,
+                    pendingLinking);
+            }
 
             if (pendingEmbedding == 0 && pendingLinking == 0)
             {
@@ -152,6 +178,9 @@ public sealed class WorkerPipelineRunner
 
         for (var iteration = 1; iteration <= maxCatchupIterations; iteration++)
         {
+            var pendingLinkingBefore = await db.Posts.CountAsync(
+                p => p.Embedding != null && !p.EventLinks.Any(l => l.IsPrimary),
+                ct);
             var embedded = 0;
             try
             {
@@ -178,14 +207,36 @@ public sealed class WorkerPipelineRunner
             var pendingLinking = await db.Posts.CountAsync(
                   p => p.Embedding != null && !p.EventLinks.Any(l => l.IsPrimary),
               ct);
+            var postsWithDuplicatePrimary = await db.PostEventLinks
+                .Where(x => x.IsPrimary)
+                .GroupBy(x => x.PostId)
+                .CountAsync(g => g.Count() > 1, ct);
+            var linkedThisIteration = Math.Max(0, pendingLinkingBefore - pendingLinking);
+            var linkerFailures = Math.Max(0, clustered - linkedThisIteration);
+            var linkerSuccessRate = clustered <= 0
+                ? "n/a"
+                : $"{(linkedThisIteration / (double)clustered) * 100d:F1}%";
 
             _logger.LogInformation(
-                "Discovery post-promotion iteration {Iteration}: embedded={Embedded}, clustered={Clustered}, pendingEmbedding={PendingEmbedding}, pendingClustering={PendingClustering}.",
+                "Discovery post-promotion iteration {Iteration}: embedded={Embedded}, clustered={Clustered}, pendingEmbedding={PendingEmbedding}, pendingLinking={PendingLinking}, duplicatePrimaryPosts={DuplicatePrimaryPosts}, linkerLinked={LinkerLinked}, linkerFailed={LinkerFailed}, linkerSuccessRate={LinkerSuccessRate}.",
                 iteration,
                 embedded,
                 clustered,
                 pendingEmbedding,
-                pendingLinking);
+                pendingLinking,
+                postsWithDuplicatePrimary,
+                linkedThisIteration,
+                linkerFailures,
+                linkerSuccessRate);
+
+            if (pendingLinking > pendingLinkingBefore)
+            {
+                _logger.LogWarning(
+                    "Link backlog grew during discovery post-promotion iteration {Iteration}: before={Before}, after={After}.",
+                    iteration,
+                    pendingLinkingBefore,
+                    pendingLinking);
+            }
 
             if (pendingEmbedding == 0 && pendingLinking == 0)
             {

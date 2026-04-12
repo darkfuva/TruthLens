@@ -151,10 +151,6 @@ public sealed class ClusteringService
                 touchedEventIds.Add(eventEntity.Id);
             }
 
-            var primary = topMatches[0];
-            post.EventId = primary.Item1.Id;
-            post.ClusterAssignmentScore = primary.Item2;
-
             clustered++;
         }
 

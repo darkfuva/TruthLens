@@ -37,32 +37,10 @@ public class SourceRepository : ISourceRepository
 
     public async Task<SourceScoringStats> GetScoringStatsAsync(Guid sourceId, DateTimeOffset sinceUtc, CancellationToken ct)
     {
-        var recentPosts = _dbContext.Posts
-            .Where(p => p.SourceId == sourceId && p.PublishedAtUtc >= sinceUtc);
-
-        var recentPostCount = await recentPosts.CountAsync(ct);
-
-        var corroboratedRecentPostCount = await recentPosts
-            .Where(p => p.EventId != null)
-            .CountAsync(p =>
-                _dbContext.Posts.Any(other =>
-                    other.EventId == p.EventId &&
-                    other.SourceId != sourceId), ct);
-
-        var averageClusterAssignmentScore = await recentPosts
-            .Where(p => p.ClusterAssignmentScore != null)
-            .Select(p => p.ClusterAssignmentScore)
-            .AverageAsync(ct);
-
-        var latestPublishedAtUtc = await recentPosts
-            .Select(p => (DateTimeOffset?)p.PublishedAtUtc)
-            .MaxAsync(ct);
-
-        return new SourceScoringStats(
-            recentPostCount,
-            corroboratedRecentPostCount,
-            averageClusterAssignmentScore,
-            latestPublishedAtUtc);
+        var statsMap = await GetScoringStatsMapAsync(new[] { sourceId }, sinceUtc, ct);
+        return statsMap.TryGetValue(sourceId, out var stats)
+            ? stats
+            : new SourceScoringStats(0, 0, null, null);
     }
 
     public async Task<IReadOnlyDictionary<Guid, SourceScoringStats>> GetScoringStatsMapAsync(
@@ -76,37 +54,39 @@ public class SourceRepository : ISourceRepository
         }
 
         var sourceIdSet = sourceIds.ToHashSet();
-        var recentPosts = _dbContext.Posts
-            .Where(p => sourceIdSet.Contains(p.SourceId) && p.PublishedAtUtc >= sinceUtc);
-
-        var aggregated = await recentPosts
-            .Select(p => new
-            {
+        var recentPosts = await _dbContext.Posts
+            .AsNoTracking()
+            .Where(p => sourceIdSet.Contains(p.SourceId) && p.PublishedAtUtc >= sinceUtc)
+            .Select(p => new RecentPostProjection(
+                p.Id,
                 p.SourceId,
                 p.PublishedAtUtc,
-                p.ClusterAssignmentScore,
-                IsCorroborated = p.EventId != null && _dbContext.Posts.Any(other =>
-                    other.EventId == p.EventId &&
-                    other.SourceId != p.SourceId)
-            })
-            .GroupBy(x => x.SourceId)
-            .Select(g => new
-            {
-                SourceId = g.Key,
-                RecentPostCount = g.Count(),
-                CorroboratedRecentPostCount = g.Count(x => x.IsCorroborated),
-                AverageClusterAssignmentScore = g.Average(x => x.ClusterAssignmentScore),
-                LatestPublishedAtUtc = g.Max(x => (DateTimeOffset?)x.PublishedAtUtc)
-            })
+                p.EventLinks
+                    .Where(l => l.IsPrimary)
+                    .Select(l => (double?)l.RelevanceScore)
+                    .FirstOrDefault()))
             .ToListAsync(ct);
 
-        var map = aggregated.ToDictionary(
-            x => x.SourceId,
-            x => new SourceScoringStats(
-                x.RecentPostCount,
-                x.CorroboratedRecentPostCount,
-                x.AverageClusterAssignmentScore,
-                x.LatestPublishedAtUtc));
+        var corroboratedPostIds = (await _dbContext.PostEventLinks
+            .AsNoTracking()
+            .Where(l => sourceIdSet.Contains(l.Post.SourceId) && l.Post.PublishedAtUtc >= sinceUtc)
+            .Where(l => _dbContext.PostEventLinks.Any(other =>
+                other.EventId == l.EventId &&
+                other.Post.SourceId != l.Post.SourceId))
+            .Select(l => l.PostId)
+            .Distinct()
+            .ToListAsync(ct))
+            .ToHashSet();
+
+        var map = recentPosts
+            .GroupBy(x => x.SourceId)
+            .ToDictionary(
+                g => g.Key,
+                g => new SourceScoringStats(
+                    RecentPostCount: g.Count(),
+                    CorroboratedRecentPostCount: g.Count(x => corroboratedPostIds.Contains(x.PostId)),
+                    AveragePrimaryLinkRelevanceScore: AverageNullable(g.Select(x => x.PrimaryRelevanceScore)),
+                    LatestPublishedAtUtc: g.Max(x => (DateTimeOffset?)x.PublishedAtUtc)));
 
         foreach (var sourceId in sourceIds)
         {
@@ -115,13 +95,25 @@ public class SourceRepository : ISourceRepository
                 map[sourceId] = new SourceScoringStats(
                     RecentPostCount: 0,
                     CorroboratedRecentPostCount: 0,
-                    AverageClusterAssignmentScore: null,
+                    AveragePrimaryLinkRelevanceScore: null,
                     LatestPublishedAtUtc: null);
             }
         }
 
         return map;
     }
+
+    private static double? AverageNullable(IEnumerable<double?> values)
+    {
+        var concrete = values.Where(x => x.HasValue).Select(x => x!.Value).ToList();
+        return concrete.Count == 0 ? null : concrete.Average();
+    }
+
+    private sealed record RecentPostProjection(
+        Guid PostId,
+        Guid SourceId,
+        DateTimeOffset PublishedAtUtc,
+        double? PrimaryRelevanceScore);
 
     public Task<bool> ExistsByFeedUrlAsync(string feedUrl, CancellationToken ct)
     {

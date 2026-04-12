@@ -32,16 +32,9 @@ public sealed class PostConfiguration : IEntityTypeConfiguration<Post>
 
         entity.Property(x => x.EmbeddedAtUtc);
 
-        entity.Property(x => x.ClusterAssignmentScore);
-
         entity.HasOne(x => x.Source)
             .WithMany(x => x.Posts)
             .HasForeignKey(x => x.SourceId);
-
-        entity.HasOne(x => x.Event)
-            .WithMany(x => x.Posts)
-            .HasForeignKey(x => x.EventId)
-            .OnDelete(DeleteBehavior.SetNull);
 
         entity.HasMany(x => x.EventLinks)
             .WithOne(x => x.Post)

@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Pgvector;
@@ -12,9 +13,11 @@ using TruthLens.Infrastructure.Persistence;
 namespace TruthLens.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(TruthLensDbContext))]
-    partial class TruthLensDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260412205917_AddPostEventPrimaryUniqueIndex")]
+    partial class AddPostEventPrimaryUniqueIndex
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -247,6 +250,9 @@ namespace TruthLens.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<double?>("ClusterAssignmentScore")
+                        .HasColumnType("double precision");
+
                     b.Property<DateTimeOffset>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -259,6 +265,9 @@ namespace TruthLens.Infrastructure.Persistence.Migrations
                     b.Property<string>("EmbeddingModel")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
+
+                    b.Property<Guid?>("EventId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("ExternalId")
                         .IsRequired()
@@ -285,6 +294,8 @@ namespace TruthLens.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(2000)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("EventId");
 
                     b.HasIndex("SourceId", "ExternalId")
                         .IsUnique();
@@ -323,11 +334,6 @@ namespace TruthLens.Infrastructure.Persistence.Migrations
                     b.HasIndex("EventId");
 
                     b.HasIndex("LinkedAtUtc");
-
-                    b.HasIndex("PostId")
-                        .IsUnique()
-                        .HasDatabaseName("UX_post_event_links_one_primary_per_post")
-                        .HasFilter("\"IsPrimary\" = TRUE");
 
                     b.HasIndex("EventId", "IsPrimary");
 
@@ -494,11 +500,18 @@ namespace TruthLens.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("TruthLens.Domain.Entities.Post", b =>
                 {
+                    b.HasOne("TruthLens.Domain.Entities.Event", "Event")
+                        .WithMany("Posts")
+                        .HasForeignKey("EventId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("TruthLens.Domain.Entities.Source", "Source")
                         .WithMany("Posts")
                         .HasForeignKey("SourceId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("Event");
 
                     b.Navigation("Source");
                 });
@@ -531,6 +544,8 @@ namespace TruthLens.Infrastructure.Persistence.Migrations
                     b.Navigation("OutgoingRelations");
 
                     b.Navigation("PostLinks");
+
+                    b.Navigation("Posts");
                 });
 
             modelBuilder.Entity("TruthLens.Domain.Entities.ExternalSource", b =>
