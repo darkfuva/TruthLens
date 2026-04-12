@@ -15,7 +15,7 @@ public sealed class EventRepository : IEventRepository
     public async Task<IReadOnlyList<Event>> GetRecentWithCentroidAsync(DateTimeOffset sinceUtc, int maxCount, CancellationToken ct)
     {
         return await _db.Events
-            .Where(e => e.LastSeenAtUtc >= sinceUtc && e.CentroidEmbedding != null)
+            .Where(e => e.Status != "merged" && e.LastSeenAtUtc >= sinceUtc && e.CentroidEmbedding != null)
             .OrderByDescending(e => e.LastSeenAtUtc)
             .Take(maxCount)
             .ToListAsync(ct);
@@ -124,7 +124,7 @@ public sealed class EventRepository : IEventRepository
     public async Task<IReadOnlyList<Event>> GetUnsummarizedBatchAsync(int batchSize, CancellationToken ct)
     {
         return await _db.Events
-            .Where(e => e.Summary == null)
+            .Where(e => e.Status != "merged" && (e.Summary == null || e.SummaryModel == null || e.SummarizedAtUtc == null))
             .OrderByDescending(e => e.LastSeenAtUtc)
             .Take(batchSize)
             .ToListAsync(ct);
@@ -167,6 +167,7 @@ public sealed class EventRepository : IEventRepository
             .Include(e => e.ExternalEvidencePosts)
             .ThenInclude(x => x.ExternalSource)
             .Where(e =>
+                e.Status != "merged" &&
                 e.PostLinks.Any() &&
                 (e.LastSeenAtUtc >= sinceUtc || e.ConfidenceScore == null || e.Status == "provisional"))
             .OrderByDescending(e => e.LastSeenAtUtc)
@@ -180,7 +181,7 @@ public sealed class EventRepository : IEventRepository
             .AsSplitQuery()
             .Include(e => e.PostLinks)
             .ThenInclude(x => x.Post)
-            .Where(e => e.LastSeenAtUtc >= sinceUtc && e.PostLinks.Any())
+            .Where(e => e.Status != "merged" && e.LastSeenAtUtc >= sinceUtc && e.PostLinks.Any())
             .OrderByDescending(e => e.LastSeenAtUtc)
             .Take(maxCount)
             .ToListAsync(ct);
@@ -199,6 +200,7 @@ public sealed class EventRepository : IEventRepository
 
         return await _db.Events
             .Where(e =>
+                e.Status != "merged" &&
                 e.CentroidEmbedding != null &&
                 (touchedEventIds.Contains(e.Id) || e.LastSeenAtUtc >= sinceUtc))
             .OrderByDescending(e => e.LastSeenAtUtc)
@@ -208,7 +210,10 @@ public sealed class EventRepository : IEventRepository
 
     private IQueryable<Event> BuildDashboardBaseQuery(double? minConfidence, bool includeProvisional)
     {
-        var query = _db.Events.AsNoTracking().AsQueryable();
+        var query = _db.Events
+            .AsNoTracking()
+            .Where(e => e.Status != "merged")
+            .AsQueryable();
 
         if (!includeProvisional)
         {

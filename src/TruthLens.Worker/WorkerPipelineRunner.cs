@@ -339,4 +339,22 @@ public sealed class WorkerPipelineRunner
             result.NoMatch,
             result.Skipped);
     }
+
+    public async Task RunProvisionalGcCycleAsync(ProvisionalGcOptions options, CancellationToken ct)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var gcService = scope.ServiceProvider.GetRequiredService<ProvisionalEventGarbageCollectionService>();
+
+        var result = await gcService.MergeDuplicatesAsync(options, ct);
+        _logger.LogInformation(
+            "Provisional GC cycle: scanned={ScannedEvents}, groups={MergeGroups}, mergedEvents={MergedEvents}, linksMoved={LinksMoved}, linksDeduped={LinksDeduped}, evidenceMoved={EvidenceMoved}, evidenceDeduped={EvidenceDeduped}, summariesResetOrRequeued={SummariesReset}.",
+            result.ScannedEvents,
+            result.MergeGroups,
+            result.MergedEvents,
+            result.LinksMoved,
+            result.LinksDeduped,
+            result.EvidenceMoved,
+            result.EvidenceDeduped,
+            result.SummariesReset);
+    }
 }

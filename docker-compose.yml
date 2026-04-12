@@ -54,6 +54,15 @@ services:
       WorkerJobs__CandidatePromotion__MatchingThreshold: "0.82"
       WorkerJobs__CandidatePromotion__MaxLinksPerCandidate: "3"
       WorkerJobs__CandidatePromotion__MinCreateConfidence: "0.65"
+      WorkerJobs__ProvisionalGc__Enabled: "true"
+      WorkerJobs__ProvisionalGc__RunOnStart: "true"
+      WorkerJobs__ProvisionalGc__IntervalSeconds: "420"
+      WorkerJobs__ProvisionalGc__LookbackDays: "21"
+      WorkerJobs__ProvisionalGc__MaxEvents: "500"
+      WorkerJobs__ProvisionalGc__MaxMergeGroupsPerCycle: "40"
+      WorkerJobs__ProvisionalGc__SimilarityThreshold: "0.92"
+      WorkerJobs__ProvisionalGc__MaxAgeGapDays: "14"
+      WorkerJobs__ProvisionalGc__MinTitleJaccard: "0.08"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:

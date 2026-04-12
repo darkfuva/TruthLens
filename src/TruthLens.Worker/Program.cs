@@ -14,9 +14,11 @@ builder.Services
     .Validate(options => options.Summarization.IntervalSeconds > 0, "WorkerJobs:Summarization:IntervalSeconds must be > 0.")
     .Validate(options => options.Backfill.IntervalSeconds > 0, "WorkerJobs:Backfill:IntervalSeconds must be > 0.")
     .Validate(options => options.CandidatePromotion.IntervalSeconds > 0, "WorkerJobs:CandidatePromotion:IntervalSeconds must be > 0.")
+    .Validate(options => options.ProvisionalGc.IntervalSeconds > 0, "WorkerJobs:ProvisionalGc:IntervalSeconds must be > 0.")
     .ValidateOnStart();
 
 builder.Services.AddSingleton<WorkerPipelineRunner>();
+builder.Services.AddScoped<ProvisionalEventGarbageCollectionService>();
 
 // These HostedServices run independently with their own intervals.
 builder.Services.AddHostedService<IngestionEmbeddingClusteringWorker>();
@@ -25,6 +27,7 @@ builder.Services.AddHostedService<ScoringWorker>();
 builder.Services.AddHostedService<SummarizationWorker>();
 builder.Services.AddHostedService<GraphBackfillWorker>();
 builder.Services.AddHostedService<CandidatePromotionWorker>();
+builder.Services.AddHostedService<ProvisionalGcWorker>();
 
 var host = builder.Build();
 host.Run();

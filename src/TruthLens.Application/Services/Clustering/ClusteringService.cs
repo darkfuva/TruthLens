@@ -50,6 +50,12 @@ public sealed class ClusteringService
             .Where(e => e.CentroidEmbedding is not null)
             .ToList();
 
+        var postIds = posts.Select(x => x.Id).ToList();
+        var existingLinks = await _postEventLinkRepository.GetForPostIdsAsync(postIds, ct);
+        var existingLinksByPost = existingLinks
+            .GroupBy(x => x.PostId)
+            .ToDictionary(x => x.Key, x => x.ToList());
+
         var clustered = 0;
         var newLinks = new List<PostEventLink>();
         var newExtractedCandidates = new List<ExtractedEventCandidate>();
@@ -132,21 +138,50 @@ public sealed class ClusteringService
                 topMatches.Add((newEvent, 1.0));
             }
 
+            if (!existingLinksByPost.TryGetValue(post.Id, out var postExistingLinks))
+            {
+                postExistingLinks = new List<PostEventLink>();
+                existingLinksByPost[post.Id] = postExistingLinks;
+            }
+
+            // Reset existing link primaries for this post; we'll assign exactly one below.
+            foreach (var existing in postExistingLinks)
+            {
+                existing.IsPrimary = false;
+            }
+
             for (var i = 0; i < topMatches.Count; i++)
             {
                 var (eventEntity, score) = topMatches[i];
                 eventEntity.LastSeenAtUtc = now;
+                var isPrimary = i == 0;
+                var normalizedScore = Math.Round(Math.Max(0, Math.Min(1, score)), 4);
+                var relationType = isPrimary ? "PRIMARY" : "SECONDARY";
 
-                newLinks.Add(new PostEventLink
+                var existingLink = postExistingLinks.FirstOrDefault(x => x.EventId == eventEntity.Id);
+                if (existingLink is not null)
                 {
-                    Id = Guid.NewGuid(),
-                    PostId = post.Id,
-                    EventId = eventEntity.Id,
-                    RelevanceScore = Math.Round(Math.Max(0, Math.Min(1, score)), 4),
-                    IsPrimary = i == 0,
-                    RelationType = i == 0 ? "PRIMARY" : "SECONDARY",
-                    LinkedAtUtc = now
-                });
+                    existingLink.RelevanceScore = Math.Max(existingLink.RelevanceScore, normalizedScore);
+                    existingLink.IsPrimary = isPrimary;
+                    existingLink.RelationType = relationType;
+                    existingLink.LinkedAtUtc = now;
+                }
+                else
+                {
+                    var link = new PostEventLink
+                    {
+                        Id = Guid.NewGuid(),
+                        PostId = post.Id,
+                        EventId = eventEntity.Id,
+                        RelevanceScore = normalizedScore,
+                        IsPrimary = isPrimary,
+                        RelationType = relationType,
+                        LinkedAtUtc = now
+                    };
+
+                    newLinks.Add(link);
+                    postExistingLinks.Add(link);
+                }
 
                 touchedEventIds.Add(eventEntity.Id);
             }

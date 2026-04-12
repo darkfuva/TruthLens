@@ -10,6 +10,7 @@ public sealed class WorkerJobsOptions
     public SummarizationOptions Summarization { get; set; } = new();
     public BackfillOptions Backfill { get; set; } = new();
     public CandidatePromotionOptions CandidatePromotion { get; set; } = new();
+    public ProvisionalGcOptions ProvisionalGc { get; set; } = new();
 }
 
 public class JobOptionsBase
@@ -66,4 +67,14 @@ public sealed class CandidatePromotionOptions : JobOptionsBase
     public int MaxLinksPerCandidate { get; set; } = 3;
     public double MatchingThreshold { get; set; } = 0.82;
     public double MinCreateConfidence { get; set; } = 0.65;
+}
+
+public sealed class ProvisionalGcOptions : JobOptionsBase
+{
+    public int LookbackDays { get; set; } = 21;
+    public int MaxEvents { get; set; } = 500;
+    public int MaxMergeGroupsPerCycle { get; set; } = 40;
+    public double SimilarityThreshold { get; set; } = 0.92;
+    public int MaxAgeGapDays { get; set; } = 14;
+    public double MinTitleJaccard { get; set; } = 0.08;
 }
