@@ -42,7 +42,7 @@ public sealed class ClusteringService
     public async Task<int> ClusterPendingPostsAsync(int batchSize, double threshold, CancellationToken ct)
     {
         var now = DateTimeOffset.UtcNow;
-        var posts = await _postRepository.GetUnclusteredEmbeddedBatchAsync(batchSize, ct);
+        var posts = await _postRepository.GetEmbeddedWithoutPrimaryLinkBatchAsync(batchSize, sinceUtc: null, ct);
         var touchedEventIds = new HashSet<Guid>();
         if (posts.Count == 0) return 0;
 

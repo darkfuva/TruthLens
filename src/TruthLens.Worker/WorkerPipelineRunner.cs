@@ -37,44 +37,63 @@ public sealed class WorkerPipelineRunner
 
         var maxIterations = Math.Max(1, options.MaxIterations);
         var lastPendingEmbedding = int.MaxValue;
-        var lastPendingClustering = int.MaxValue;
+        var lastPendingLinking = int.MaxValue;
 
         for (var iteration = 1; iteration <= maxIterations; iteration++)
         {
             ct.ThrowIfCancellationRequested();
+            var embeddedCount = 0;
+            try
+            {
+                embeddedCount = await embeddingService.GenerateForPendingPostsAsync(
+                    Math.Max(1, options.EmbeddingBatchSize),
+                    ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Embedding step failed in ingestion cycle iteration {Iteration}. Continuing to clustering.", iteration);
+            }
 
-            var embeddedCount = await embeddingService.GenerateForPendingPostsAsync(
-                Math.Max(1, options.EmbeddingBatchSize),
-                ct);
-            var clusteredCount = await clusteringService.ClusterPendingPostsAsync(
-                Math.Max(1, options.ClusteringBatchSize),
-                options.ClusteringThreshold,
-                ct);
+            var clusteredCount = 0;
+            try
+            {
+                clusteredCount = await clusteringService.ClusterPendingPostsAsync(
+                    Math.Max(1, options.ClusteringBatchSize),
+                    options.ClusteringThreshold,
+                    ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Clustering/linking step failed in ingestion cycle iteration {Iteration}.", iteration);
+            }
+
 
             var pendingEmbedding = await db.Posts.CountAsync(p => p.Embedding == null, ct);
-            var pendingClustering = await db.Posts.CountAsync(p => p.Embedding != null && p.EventId == null, ct);
+            var pendingLinking = await db.Posts.CountAsync(
+                p => p.Embedding != null && !p.EventLinks.Any(l => l.IsPrimary),
+                ct);
 
             _logger.LogInformation(
-                "Ingestion cycle iteration {Iteration}: embedded={EmbeddedCount}, clustered={ClusteredCount}, pendingEmbedding={PendingEmbedding}, pendingClustering={PendingClustering}.",
+                "Ingestion cycle iteration {Iteration}: embedded={EmbeddedCount}, clustered={ClusteredCount}, pendingEmbedding={PendingEmbedding}, pendingLinking={PendingLinking}.",
                 iteration,
                 embeddedCount,
                 clusteredCount,
                 pendingEmbedding,
-                pendingClustering);
+                pendingLinking);
 
-            if (pendingEmbedding == 0 && pendingClustering == 0)
+            if (pendingEmbedding == 0 && pendingLinking == 0)
             {
                 break;
             }
 
-            if (pendingEmbedding == lastPendingEmbedding && pendingClustering == lastPendingClustering)
+            if (pendingEmbedding == lastPendingEmbedding && pendingLinking == lastPendingLinking)
             {
                 _logger.LogWarning("Ingestion cycle stopped due to no progress at iteration {Iteration}.", iteration);
                 break;
             }
 
             lastPendingEmbedding = pendingEmbedding;
-            lastPendingClustering = pendingClustering;
+            lastPendingLinking = pendingLinking;
         }
     }
 
@@ -128,41 +147,59 @@ public sealed class WorkerPipelineRunner
         _logger.LogInformation("Discovery cycle: post-promotion ingestion inserted {InsertedCount}.", insertedAfterPromotion);
 
         var lastPendingEmbedding = int.MaxValue;
-        var lastPendingClustering = int.MaxValue;
+        var lastPendingLinking = int.MaxValue;
         var maxCatchupIterations = Math.Max(1, options.PostPromotionMaxCatchupIterations);
 
-        for (var i = 1; i <= maxCatchupIterations; i++)
+        for (var iteration = 1; iteration <= maxCatchupIterations; iteration++)
         {
-            var embedded = await embeddingService.GenerateForPendingPostsAsync(Math.Max(1, ingestionOptions.EmbeddingBatchSize), ct);
-            var clustered = await clusteringService.ClusterPendingPostsAsync(
-                Math.Max(1, ingestionOptions.ClusteringBatchSize),
-                ingestionOptions.ClusteringThreshold,
-                ct);
+            var embedded = 0;
+            try
+            {
+                embedded = await embeddingService.GenerateForPendingPostsAsync(Math.Max(1, ingestionOptions.EmbeddingBatchSize), ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Embedding step failed in ingestion cycle iteration {Iteration}. Continuing to clustering.", iteration);
+            }
+            var clustered = 0;
+            try
+            {
+                clustered = await clusteringService.ClusterPendingPostsAsync(
+                    Math.Max(1, ingestionOptions.ClusteringBatchSize),
+                    ingestionOptions.ClusteringThreshold,
+                    ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Clustering/linking step failed in ingestion cycle iteration {Iteration}.", iteration);
+            }
 
             var pendingEmbedding = await db.Posts.CountAsync(p => p.Embedding == null, ct);
-            var pendingClustering = await db.Posts.CountAsync(p => p.Embedding != null && p.EventId == null, ct);
+            var pendingLinking = await db.Posts.CountAsync(
+                  p => p.Embedding != null && !p.EventLinks.Any(l => l.IsPrimary),
+              ct);
 
             _logger.LogInformation(
                 "Discovery post-promotion iteration {Iteration}: embedded={Embedded}, clustered={Clustered}, pendingEmbedding={PendingEmbedding}, pendingClustering={PendingClustering}.",
-                i,
+                iteration,
                 embedded,
                 clustered,
                 pendingEmbedding,
-                pendingClustering);
+                pendingLinking);
 
-            if (pendingEmbedding == 0 && pendingClustering == 0)
+            if (pendingEmbedding == 0 && pendingLinking == 0)
             {
                 break;
             }
 
-            if (pendingEmbedding == lastPendingEmbedding && pendingClustering == lastPendingClustering)
+            if (pendingEmbedding == lastPendingEmbedding && pendingLinking == lastPendingLinking)
             {
-                _logger.LogWarning("Discovery post-promotion catch-up stopped due to no progress at iteration {Iteration}.", i);
+                _logger.LogWarning("Discovery post-promotion catch-up stopped due to no progress at iteration {Iteration}.", iteration);
                 break;
             }
 
             lastPendingEmbedding = pendingEmbedding;
-            lastPendingClustering = pendingClustering;
+            lastPendingLinking = pendingLinking;
         }
     }
 

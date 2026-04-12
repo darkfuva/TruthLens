@@ -11,7 +11,7 @@ services:
       - truthlens_pgdata:/var/lib/postgresql/data
       - ./docker/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -44,8 +44,9 @@ services:
       ConnectionStrings__DefaultConnection: Host=db;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}
       Ollama__BaseUrl: http://host.docker.internal:11434
       Ollama__EmbeddingModel: nomic-embed-text
-      Ollama__SummarizationModel: llama3.2:3b
-      Ollama__TimeoutSeconds: 180
+      Ollama__ExtractionModel: gemma4:e2b-it-q4_K_M
+      Ollama__SummarizationModel: gemma4:e2b-it-q4_K_M
+      Ollama__TimeoutSeconds: 120
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
